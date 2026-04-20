@@ -258,7 +258,7 @@ function updateCell(
 
 // ── XLSX Reading ──────────────────────────────────────────────────────────────
 
-export async function readXlsx(buffer: Buffer): Promise<ConversionData> {
+export async function readXlsx(buffer: any): Promise<ConversionData> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer);
   const ws = wb.getWorksheet("All");
@@ -368,8 +368,9 @@ export async function readXlsx(buffer: Buffer): Promise<ConversionData> {
 
 // ── DOCX Filling ──────────────────────────────────────────────────────────────
 
-export function fillDocx(templateBuffer: Buffer, data: ConversionData): Buffer {
+export function fillDocx(templateBuffer: any, data: ConversionData): any {
   const zip = new PizZip(templateBuffer);
+
 
   // 1. Update header XML files
   for (const filename of Object.keys(zip.files)) {
