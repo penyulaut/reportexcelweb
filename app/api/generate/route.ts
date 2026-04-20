@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
 
     const filename = `LogDTE_${data.periode.replace(/\s+/g, "")}.docx`;
 
-    return new Response(outputBuffer, {
+    return new Response(outputBuffer as unknown as BodyInit, {
       status: 200,
       headers: {
         "Content-Type":
