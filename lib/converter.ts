@@ -339,12 +339,32 @@ export async function readXlsx(buffer: any): Promise<ConversionData> {
   }
 
   // Count incident vs Service Request / Work Order
-  let incidentCount = 0;
-  let srCount = 0;
+  // As requested, set these to empty fields/0 since source is unknown
+  let incidentCount: string | number = "";
+  let srCount: string | number = "";
+
+  // Manually calculate SLA based on tickets data (1/Terpenuhi/Met = 1, otherwise 0/Missed)
+  let totalMetResp = 0;
+  let totalMetResol = 0;
+  
   for (const t of tickets) {
-    if (t.tipe.toLowerCase().includes("incident")) incidentCount++;
-    else srCount++;
+    const respon = t.slaRespon.trim().toLowerCase();
+    const resol = t.slaResol.trim().toLowerCase();
+    
+    if (respon === "met" || respon === "1" || respon === "terpenuhi") {
+      totalMetResp++;
+    }
+    if (resol === "met" || resol === "1" || resol === "terpenuhi") {
+      totalMetResol++;
+    }
   }
+
+  const validTickets = tickets.length;
+  // Use sumMap['Total Tiket Yang Selesai'] if available, otherwise fallback to total valid tickets
+  const denominator = sumMap["Total Tiket Yang Selesai"] || validTickets;
+  
+  const pctMetResp = denominator > 0 ? (totalMetResp / denominator) : 0;
+  const pctMetResol = denominator > 0 ? (totalMetResol / denominator) : 0;
 
   const today = new Date();
   const tanggal = `${today.getDate()} ${MONTHS_ID[today.getMonth() + 1]} ${today.getFullYear()}`;
@@ -352,13 +372,13 @@ export async function readXlsx(buffer: any): Promise<ConversionData> {
   return {
     periode,
     tanggal,
-    totalTiket: sumMap["Total Tiket"] ?? tickets.length,
+    totalTiket: sumMap["Total Tiket"] ?? validTickets,
     totalPending: sumMap["Total Pending"] ?? 0,
-    totalSelesai: sumMap["Total Tiket Yang Selesai"] ?? 0,
-    totalMetResp: sumMap["Total Met Response"] ?? 0,
-    totalMetResol: sumMap["Total Met Resolution"] ?? 0,
-    pctMetResp: fmtPct(sumMap["% Met Response"]),
-    pctMetResol: fmtPct(sumMap["% Met Resolution"]),
+    totalSelesai: sumMap["Total Tiket Yang Selesai"] ?? totalMetResol,
+    totalMetResp: totalMetResp,
+    totalMetResol: totalMetResol,
+    pctMetResp: fmtPct(pctMetResp),
+    pctMetResol: fmtPct(pctMetResol),
     incidentCount,
     srCount,
     top5,
