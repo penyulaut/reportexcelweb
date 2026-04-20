@@ -43,8 +43,8 @@ export interface ConversionData {
   totalMetResol: number;
   pctMetResp: string;
   pctMetResol: string;
-  incidentCount: number;
-  srCount: number;
+  incidentCount: number | string;
+  srCount: number | string;
   top5: Array<[string, number]>;
   tickets: Ticket[];
 }
