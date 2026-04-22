@@ -17,6 +17,15 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: "No xlsx file provided" }, { status: 400 });
     }
 
+    if (!xlsxFile.name.match(/\.xlsx$/i)) {
+      return Response.json({ error: "File harus berformat .xlsx" }, { status: 400 });
+    }
+
+    const MAX_SIZE = 5 * 1024 * 1024;
+    if (xlsxFile.size > MAX_SIZE) {
+      return Response.json({ error: "File maksimal 5MB" }, { status: 400 });
+    }
+
     // Convert uploaded File → Node.js Buffer
     const xlsxBuffer = Buffer.from(await xlsxFile.arrayBuffer());
 

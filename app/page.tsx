@@ -14,9 +14,14 @@ export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const MAX_SIZE = 5 * 1024 * 1024;
   const handleFile = (f: File) => {
     if (!f.name.match(/\.xlsx$/i)) {
       setState({ status: "error", message: "File harus berformat .xlsx" });
+      return;
+    }
+    if (f.size > MAX_SIZE) {
+      setState({ status: "error", message: "File maksimal 5MB" });
       return;
     }
     setFile(f);
