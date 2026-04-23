@@ -1,33 +1,15 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./convert.css";
-
-// const geistSans = Geist({
-//   variable: "--font-geist-sans",
-//   subsets: ["latin"],
-// });
-
-// const geistMono = Geist_Mono({
-//   variable: "--font-geist-mono",
-//   subsets: ["latin"],
-// });
 
 export const metadata: Metadata = {
   title: "Log DTE Converter | SLA XLSX → DOCX",
   description: "Konversi spreadsheet SLA ke dokumen Log Dukungan Teknis secara otomatis.",
 };
 
-export default function RootLayout({
+export default function ConvertLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  return (
-    <html
-      lang="en"
-      //className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col">{children}</body>
-    </html>
-  );
+  return <div className="min-h-full flex flex-col">{children}</div>;
 }
