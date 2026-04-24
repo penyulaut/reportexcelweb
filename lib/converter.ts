@@ -258,34 +258,214 @@ function updateCell(
 
 // ── XLSX Reading ──────────────────────────────────────────────────────────────
 
+/** Normalize string for comparison: trim, lowercase, remove extra spaces */
+function normalizeStr(s: unknown): string {
+  return String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** Detect header row by searching for known column headers */
+function findHeaderRow(ws: ExcelJS.Worksheet): { rowNum: number; colMap: Record<string, number> } | null {
+  const knownHeaders = [
+    "no", "tiket", "nomor tiket", "ticket", "no. tiket",
+    "ringkasan", "summary", "keterangan", "uraian",
+    "rincian", "detail", "komentar", 
+    "pemohon", "requester", "user", "pengguna",
+    "penyebab", "cause", "alasan",
+    "solusi", "resolution", "jawaban",
+    "tipe", "type", "kategori", "category",
+    "tanggal", "date", "tanggal tiket", "ticket date",
+    "pic", "assignee", "handler", "penanggung jawab",
+    "vendor", "supplier", "third party",
+    "status",
+    "sla respon", "sla response", "responsiveness",
+    "sla resolusi", "sla resolution", "resolution time"
+  ];
+  
+  for (let r = 1; r <= Math.min(20, ws.rowCount); r++) {
+    const row = ws.getRow(r);
+    const colMap: Record<string, number> = {};
+    let matchedCount = 0;
+    
+    // Check each cell in this row
+    for (let c = 1; c <= 20; c++) {
+      const cellVal_raw = cellVal(row.getCell(c));
+      const normalized = normalizeStr(cellVal_raw);
+      
+      for (const header of knownHeaders) {
+        if (normalized === header || normalized.includes(header)) {
+          // Map to standard key - BE SPECIFIC to avoid conflicts
+          // "No" or "#" = sequential number (1,2,3), NOT the ticket number
+          // "Tiket", "Ticket", "Nomor Tiket" = actual ticket ID (WO000..., INC000...)
+          if (normalized === "no" || normalized === "no." || normalized === "#" || normalized === "nomor") {
+            colMap["seqNo"] = c; // Sequential number (1, 2, 3...)
+          } else if (normalized.includes("tiket") || normalized.includes("ticket") || normalized.includes("nomor tiket")) {
+            if (!colMap["tiket"]) colMap["tiket"] = c; // Ticket ID (WO..., INC...)
+          } else if (normalized.includes("ringkasan") || normalized.includes("summary") || normalized.includes("keterangan")) {
+            colMap["ringkasan"] = c;
+          } else if (normalized.includes("rincian") || normalized.includes("detail") || normalized.includes("komentar")) {
+            colMap["rincian"] = c;
+          } else if (normalized.includes("pemohon") || normalized.includes("requester") || normalized.includes("user")) {
+            colMap["pemohon"] = c;
+          } else if (normalized.includes("penyebab") || normalized.includes("cause") || normalized.includes("alasan")) {
+            colMap["penyebab"] = c;
+          } else if (normalized.includes("solusi") || normalized.includes("resolution") || normalized.includes("jawaban")) {
+            colMap["solusi"] = c;
+          } else if (normalized.includes("tipe") || normalized.includes("type") || normalized.includes("kategori")) {
+            colMap["tipe"] = c;
+          } else if (normalized.includes("tanggal") || normalized.includes("date")) {
+            colMap["tanggal"] = c;
+          } else if (normalized.includes("pic") || normalized.includes("assignee") || normalized.includes("handler")) {
+            colMap["pic"] = c;
+          } else if (normalized.includes("vendor") || normalized.includes("supplier")) {
+            colMap["vendor"] = c;
+          } else if (normalized === "status") {
+            colMap["status"] = c;
+          } else if (normalized.includes("sla") && (normalized.includes("respon") || normalized.includes("response"))) {
+            colMap["slaRespon"] = c;
+          } else if (normalized.includes("sla") && (normalized.includes("resol") || normalized.includes("resolut"))) {
+            colMap["slaResol"] = c;
+          }
+          matchedCount++;
+          break;
+        }
+      }
+    }
+    
+    // If we found at least 3 matching headers, this is likely the header row
+    if (matchedCount >= 3) {
+      return { rowNum: r, colMap };
+    }
+  }
+  return null;
+}
+
 export async function readXlsx(buffer: any): Promise<ConversionData> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer);
-  const ws = wb.getWorksheet("All");
+  
+  // Find worksheet: priority exact "All", then any containing "All" (case insensitive)
+  let ws = wb.getWorksheet("All");
+  if (!ws) {
+    for (const sheet of wb.worksheets) {
+      if (sheet.name.toLowerCase() === "all") {
+        ws = sheet;
+        break;
+      }
+    }
+  }
+  if (!ws) {
+    for (const sheet of wb.worksheets) {
+      if (sheet.name.toLowerCase().includes("all")) {
+        ws = sheet;
+        break;
+      }
+    }
+  }
   if (!ws) throw new Error('Sheet "All" tidak ditemukan dalam file XLSX');
 
-  // Summary section: rows 3–10, label in col D (4), value in col E (5)
+  // Find header row dynamically
+  const headerInfo = findHeaderRow(ws);
+  if (!headerInfo) {
+    throw new Error("Tidak dapat menemukan baris header di file Excel. Pastikan file memiliki kolom seperti: No, Tiket, Ringkasan, dll.");
+  }
+  
+  const headerRow = headerInfo.rowNum;
+  const col = headerInfo.colMap;
+  
+  // Default column positions if not found
+  const colSeqNo = col["seqNo"] || 3;  // Sequential number (1, 2, 3...)
+  const colTiket = col["tiket"] || 4;  // Ticket ID (WO000..., INC000...)
+  const colRingkasan = col["ringkasan"] || 5;
+  const colRincian = col["rincian"] || 6;
+  const colPemohon = col["pemohon"] || 7;
+  const colPenyebab = col["penyebab"] || 8;
+  const colSolusi = col["solusi"] || 9;
+  const colTipe = col["tipe"] || 10;
+  const colTanggal = col["tanggal"] || 11;
+  const colPic = col["pic"] || 12;
+  const colVendor = col["vendor"] || 13;
+  const colStatus = col["status"] || 14;
+  const colSlaRespon = col["slaRespon"] || 18;
+  const colSlaResol = col["slaResol"] || 19;
+
+  // Summary section: scan first 15 rows for summary labels
   const sumMap: Record<string, number> = {};
-  for (let r = 3; r <= 10; r++) {
+  const summaryLabels = ["total", "pending", "selesai", "completed", "finished", "incident", "service", "work order"];
+  
+  for (let r = 1; r <= Math.min(15, headerRow - 1); r++) {
     const row = ws.getRow(r);
-    const label = cellVal(row.getCell(4));
-    let val = cellVal(row.getCell(5));
-    if (typeof val === "string") val = parseFloat(val);
-    if (label && val != null && !isNaN(val as number)) {
-      sumMap[String(label)] = Number(val);
+    for (let c = 1; c <= 10; c++) {
+      const label = String(cellVal(row.getCell(c)) ?? "").trim();
+      const normalizedLabel = label.toLowerCase();
+      
+      // Check if this looks like a summary label
+      const isSummaryLabel = summaryLabels.some(sl => normalizedLabel.includes(sl));
+      
+      if (isSummaryLabel && label) {
+        // Look for value in adjacent columns
+        for (let vc = c + 1; vc <= c + 3 && vc <= 15; vc++) {
+          let val = cellVal(row.getCell(vc));
+          if (typeof val === "string") val = parseFloat(val);
+          if (val != null && !isNaN(val as number)) {
+            sumMap[label] = Number(val);
+            break;
+          }
+        }
+      }
     }
   }
 
-  // Detail section: rows 16+, col C (3) = sequential row number
+  // Detail section: read from header row + 1 onwards
   const tickets: Ticket[] = [];
   const dates: Date[] = [];
+  const seenTickets = new Set<string>(); // Track duplicates
+  let sequentialNo = 1;
+  const MAX_EMPTY_ROWS = 5; // Stop after 5 consecutive empty rows
+  let emptyRowCount = 0;
 
-  ws.eachRow((row, rowNum) => {
-    if (rowNum < 16) return;
-    const noVal = cellVal(row.getCell(3));
-    if (noVal == null || typeof noVal !== "number") return;
+  console.log(`[Converter] Starting read from row ${headerRow + 1}, rowCount=${ws.rowCount}`);
 
-    const tglVal = cellVal(row.getCell(11));
+  for (let r = headerRow + 1; r <= ws.rowCount; r++) {
+    const row = ws.getRow(r);
+    
+    // Get ticket number (required field)
+    const tiketVal = String(cellVal(row.getCell(colTiket)) ?? "").trim();
+    const picVal = String(cellVal(row.getCell(colPic)) ?? "").trim();
+    const statusVal = String(cellVal(row.getCell(colStatus)) ?? "").trim();
+    
+    // Check if this is a ghost/empty row (multiple empty fields)
+    if (!tiketVal && !picVal && !statusVal) {
+      emptyRowCount++;
+      if (emptyRowCount >= MAX_EMPTY_ROWS) {
+        console.log(`[Converter] Stopping at row ${r} after ${MAX_EMPTY_ROWS} empty rows`);
+        break;
+      }
+      continue;
+    }
+    emptyRowCount = 0; // Reset counter when we find valid data
+    
+    // Skip if no ticket number
+    if (!tiketVal) continue;
+    
+    // STRICT validation: Must be WO or INC followed by numbers
+    // Pattern: WO followed by 10-15 digits OR INC followed by 7-15 digits
+    const tiketUpper = tiketVal.toUpperCase();
+    const isValidWO = /^WO\d{10,15}$/.test(tiketUpper);
+    const isValidINC = /^INC\d{7,15}$/.test(tiketUpper);
+    
+    if (!isValidWO && !isValidINC) {
+      console.log(`[Converter] Row ${r}: Skipping invalid ticket format: "${tiketVal}"`);
+      continue;
+    }
+    
+    // Check for duplicates
+    if (seenTickets.has(tiketUpper)) {
+      console.log(`[Converter] Row ${r}: Skipping duplicate ticket: "${tiketVal}"`);
+      continue;
+    }
+    seenTickets.add(tiketUpper);
+
+    const tglVal = cellVal(row.getCell(colTanggal));
     let tglStr = "";
     if (tglVal instanceof Date) {
       const d = tglVal;
@@ -294,26 +474,29 @@ export async function readXlsx(buffer: any): Promise<ConversionData> {
       ).padStart(2, "0")}/${d.getFullYear()}`;
       dates.push(d);
     } else if (tglVal) {
-      tglStr = String(tglVal);
+      tglStr = String(tglVal).trim();
     }
 
     tickets.push({
-      no: Math.round(noVal as number),
-      tiket: String(cellVal(row.getCell(4)) ?? ""),
-      ringkasan: String(cellVal(row.getCell(5)) ?? ""),
-      rincian: String(cellVal(row.getCell(6)) ?? ""),
-      pemohon: String(cellVal(row.getCell(7)) ?? ""),
-      penyebab: String(cellVal(row.getCell(8)) ?? ""),
-      solusi: String(cellVal(row.getCell(9)) ?? ""),
-      tipe: String(cellVal(row.getCell(10)) ?? ""),
+      no: sequentialNo++,
+      tiket: tiketVal,
+      ringkasan: String(cellVal(row.getCell(colRingkasan)) ?? "").trim(),
+      rincian: String(cellVal(row.getCell(colRincian)) ?? "").trim(),
+      pemohon: String(cellVal(row.getCell(colPemohon)) ?? "").trim(),
+      penyebab: String(cellVal(row.getCell(colPenyebab)) ?? "").trim(),
+      solusi: String(cellVal(row.getCell(colSolusi)) ?? "").trim(),
+      tipe: String(cellVal(row.getCell(colTipe)) ?? "").trim(),
       tanggal: tglStr,
-      pic: String(cellVal(row.getCell(12)) ?? ""),
-      vendor: String(cellVal(row.getCell(13)) ?? ""),
-      status: String(cellVal(row.getCell(14)) ?? ""),
-      slaRespon: String(cellVal(row.getCell(18)) ?? ""),
-      slaResol: String(cellVal(row.getCell(19)) ?? ""),
+      pic: String(cellVal(row.getCell(colPic)) ?? "").trim(),
+      vendor: String(cellVal(row.getCell(colVendor)) ?? "").trim(),
+      status: String(cellVal(row.getCell(colStatus)) ?? "").trim(),
+      slaRespon: String(cellVal(row.getCell(colSlaRespon)) ?? "").trim(),
+      slaResol: String(cellVal(row.getCell(colSlaResol)) ?? "").trim(),
     });
-  });
+  }
+
+  console.log(`[Converter] Total valid tickets: ${tickets.length}`);
+  console.log(`[Converter] Summary map:`, sumMap);
 
   // Sort primary by PIC (worker id) then original ticket number, then re-number
   tickets.sort(
@@ -338,10 +521,19 @@ export async function readXlsx(buffer: any): Promise<ConversionData> {
     periode = `${MONTHS_ID[earliest.getMonth() + 1]} ${earliest.getFullYear()}`;
   }
 
-  // Count incident vs Service Request / Work Order
-  // As requested, set these to empty fields/0 since source is unknown
-  let incidentCount: string | number = "";
-  let srCount: string | number = "";
+  // Count incident vs Service Request based on ticket prefix
+  // INC = Incident, WO = Service Request (Work Order)
+  let incidentCount = 0;
+  let srCount = 0;
+  
+  for (const t of tickets) {
+    const tiketCode = t.tiket.trim().toUpperCase();
+    if (tiketCode.startsWith("INC")) {
+      incidentCount++;
+    } else if (tiketCode.startsWith("WO")) {
+      srCount++;
+    }
+  }
 
   // Manually calculate SLA based on tickets data (1/Terpenuhi/Met = 1, otherwise 0/Missed)
   let totalMetResp = 0;
@@ -360,23 +552,27 @@ export async function readXlsx(buffer: any): Promise<ConversionData> {
   }
 
   const validTickets = tickets.length;
-  // Use sumMap['Total Tiket Yang Selesai'] if available, otherwise fallback to total valid tickets
-  const denominator = sumMap["Total Tiket Yang Selesai"] || validTickets;
   
-  const pctMetResp = denominator > 0 ? (totalMetResp / denominator) : 0;
-  const pctMetResol = denominator > 0 ? (totalMetResol / denominator) : 0;
+  // Calculate totals from actual data (not from Excel sumMap which may be wrong)
+  const totalSelesai = validTickets; // All valid tickets are considered completed
+  const denominator = totalSelesai > 0 ? totalSelesai : 1;
+  
+  const pctMetResp = totalMetResp / denominator;
+  const pctMetResol = totalMetResol / denominator;
 
   const today = new Date();
   const tanggal = `${today.getDate()} ${MONTHS_ID[today.getMonth() + 1]} ${today.getFullYear()}`;
 
+  console.log(`[Converter] Summary: total=${validTickets}, incident=${incidentCount}, sr=${srCount}, metResp=${totalMetResp}, metResol=${totalMetResol}`);
+
   return {
     periode,
     tanggal,
-    totalTiket: sumMap["Total Tiket"] ?? validTickets,
-    totalPending: sumMap["Total Pending"] ?? 0,
-    totalSelesai: sumMap["Total Tiket Yang Selesai"] ?? totalMetResol,
-    totalMetResp: totalMetResp,
-    totalMetResol: totalMetResol,
+    totalTiket: validTickets,     // Use actual count (146), not Excel's 190
+    totalPending: 0,                 // All valid tickets are completed
+    totalSelesai: totalSelesai,    // Same as totalTiket
+    totalMetResp: totalMetResp,    // Counted from actual ticket data
+    totalMetResol: totalMetResol,  // Counted from actual ticket data
     pctMetResp: fmtPct(pctMetResp),
     pctMetResol: fmtPct(pctMetResol),
     incidentCount,

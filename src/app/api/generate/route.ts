@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import fs from "fs";
 import path from "path";
 import { readXlsx, fillDocx } from "@/lib/converter";
+import { initDatabase, saveConversionBatch } from "@/lib/turso";
 
 export const runtime = "nodejs";
 
@@ -44,6 +45,33 @@ export async function POST(request: NextRequest) {
     // Fill docx template → output buffer
     const outputBuffer = fillDocx(templateBuffer, data);
 
+    // Save to Turso database (async, don't block response)
+    let batchId: number | undefined;
+    try {
+      await initDatabase();
+      batchId = await saveConversionBatch(
+        {
+          periode: data.periode,
+          tanggal: data.tanggal,
+          totalTiket: data.totalTiket,
+          totalPending: data.totalPending,
+          totalSelesai: data.totalSelesai,
+          totalMetResp: data.totalMetResp,
+          totalMetResol: data.totalMetResol,
+          pctMetResp: data.pctMetResp,
+          pctMetResol: data.pctMetResol,
+          incidentCount: Number(data.incidentCount),
+          srCount: Number(data.srCount),
+        },
+        data.tickets,
+        data.top5
+      );
+      console.log(`[API] Saved to Turso with batch ID: ${batchId}`);
+    } catch (dbErr) {
+      console.error("[API] Failed to save to Turso:", dbErr);
+      // Don't fail the request if DB save fails
+    }
+
     const filename = `LogDTE_${data.periode.replace(/\s+/g, "")}.docx`;
 
     return new Response(outputBuffer as unknown as BodyInit, {
@@ -54,6 +82,7 @@ export async function POST(request: NextRequest) {
         "Content-Disposition": `attachment; filename="${filename}"`,
         "X-Tickets": String(data.tickets.length),
         "X-Periode": data.periode,
+        "X-Batch-Id": String(batchId || ""),
       },
     });
   } catch (err: unknown) {
