@@ -48,11 +48,11 @@ const navItems: NavItem[] = [
   //   icon: <ListIcon />,
   //   subItems: [{ name: "Form Elements", path: "/form-elements", pro: false }],
   // },
-  // {
-  //   name: "Tables",
-  //   icon: <TableIcon />,
-  //   subItems: [{ name: "Basic Tables", path: "/basic-tables", pro: false }],
-  // },
+  {
+    name: "Tables",
+    icon: <TableIcon />,
+    subItems: [{ name: "Basic Tables", path: "/basic-tables", pro: false }],
+  },
   // {
   //   name: "Pages",
   //   icon: <PageIcon />,
@@ -346,7 +346,7 @@ const AppSidebar: React.FC = () => {
           <div className="flex flex-col gap-4">
             <div>
               <h2
-                className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 ${
+                className={`mb-4 text-xs uppercase flex leading-5 text-gray-400 ${
                   !isExpanded && !isHovered
                     ? "lg:justify-center"
                     : "justify-start"
@@ -363,7 +363,7 @@ const AppSidebar: React.FC = () => {
 
             <div className="">
               <h2
-                className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 ${
+                className={`mb-4 text-xs uppercase flex leading-5 text-gray-400 ${
                   !isExpanded && !isHovered
                     ? "lg:justify-center"
                     : "justify-start"
