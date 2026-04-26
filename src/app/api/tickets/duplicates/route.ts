@@ -37,47 +37,64 @@ export async function GET(request: NextRequest) {
     if (tiketNumber) args.push(tiketNumber);
     if (batchId && !tiketNumber) args.push(batchId);
 
-    const duplicates = await db.execute({
-      sql: duplicatesQuery,
-      args,
-    });
+    const [duplicates, stats] = await Promise.all([
+      db.execute({ sql: duplicatesQuery, args }),
+      db.execute(`
+        SELECT 
+          COUNT(DISTINCT t.tiket) as unique_tickets,
+          COUNT(*) as total_records,
+          (COUNT(*) - COUNT(DISTINCT t.tiket)) as duplicate_count
+        FROM tickets t
+      `),
+    ]);
 
-    // Get details for each duplicate
-    const duplicateDetails = [];
-    for (const dup of duplicates.rows) {
-      const details = await db.execute({
+    // Build duplicate details in a single bulk query instead of N+1
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let duplicateDetails: Array<{
+      tiket: unknown;
+      occurrence_count: unknown;
+      periods: string[];
+      batch_ids: string[];
+      first_seen: unknown;
+      last_seen: unknown;
+      instances: Record<string, unknown>[];
+    }> = [];
+
+    if (duplicates.rows.length > 0) {
+      const dupTicketIds = duplicates.rows.map(d => d.tiket as string);
+      const placeholders = dupTicketIds.map(() => '?').join(', ');
+
+      const allDetails = await db.execute({
         sql: `
           SELECT 
-            t.*,
-            b.periode,
-            b.created_at as batch_created
+            t.tiket, t.no, t.ringkasan, t.pic, t.tanggal, t.sla_respon, t.sla_resol,
+            t.batch_id, b.periode, b.created_at as batch_created
           FROM tickets t
           JOIN conversion_batches b ON t.batch_id = b.id
-          WHERE t.tiket = ?
-          ORDER BY b.created_at
+          WHERE t.tiket IN (${placeholders})
+          ORDER BY t.tiket, b.created_at
         `,
-        args: [dup.tiket],
+        args: dupTicketIds,
       });
 
-      duplicateDetails.push({
+      // Group details by tiket in JS
+      const detailsByTicket = new Map<string, Record<string, unknown>[]>();
+      for (const row of allDetails.rows) {
+        const key = row.tiket as string;
+        if (!detailsByTicket.has(key)) detailsByTicket.set(key, []);
+        detailsByTicket.get(key)!.push(row);
+      }
+
+      duplicateDetails = duplicates.rows.map(dup => ({
         tiket: dup.tiket,
         occurrence_count: dup.occurrence_count,
         periods: (dup.periods as string).split(","),
         batch_ids: (dup.batch_ids as string).split(","),
         first_seen: dup.first_seen,
         last_seen: dup.last_seen,
-        instances: details.rows,
-      });
+        instances: detailsByTicket.get(dup.tiket as string) || [],
+      }));
     }
-
-    // Summary statistics
-    const stats = await db.execute(`
-      SELECT 
-        COUNT(DISTINCT t.tiket) as unique_tickets,
-        COUNT(*) as total_records,
-        (COUNT(*) - COUNT(DISTINCT t.tiket)) as duplicate_count
-      FROM tickets t
-    `);
 
     return Response.json({
       summary: stats.rows[0],

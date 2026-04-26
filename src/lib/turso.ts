@@ -40,9 +40,17 @@ export async function initDatabase() {
         pct_met_resol TEXT NOT NULL,
         incident_count INTEGER NOT NULL,
         sr_count INTEGER NOT NULL,
+        top_5 TEXT DEFAULT '[]',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Add top_5 column if it doesn't exist (migration for existing DBs)
+    try {
+      await db.execute(`ALTER TABLE conversion_batches ADD COLUMN top_5 TEXT DEFAULT '[]'`);
+    } catch {
+      // Column already exists, ignore
+    }
   
   // Table for individual tickets
   await db.execute(`
@@ -79,6 +87,14 @@ export async function initDatabase() {
       FOREIGN KEY (batch_id) REFERENCES conversion_batches(id)
     )
   `);
+
+  // Performance indexes
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_tickets_batch_id ON tickets(batch_id)`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_tickets_tiket ON tickets(tiket)`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_tickets_pic ON tickets(pic)`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_batches_periode ON conversion_batches(periode)`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_batches_created_at ON conversion_batches(created_at)`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_top_ringkasan_batch_id ON top_ringkasan(batch_id)`);
   
   console.log("[Turso] Database initialized successfully");
   } catch (err: unknown) {
@@ -133,14 +149,15 @@ export async function saveConversionBatch(
 ): Promise<number> {
   const db = getTursoClient();
   
-  // Insert batch summary
+  // Insert batch summary (including top_5 JSON)
+  const top5Json = JSON.stringify(top5);
   const batchResult = await db.execute({
     sql: `
       INSERT INTO conversion_batches 
       (periode, tanggal, total_tiket, total_pending, total_selesai, 
        total_met_resp, total_met_resol, pct_met_resp, pct_met_resol, 
-       incident_count, sr_count)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       incident_count, sr_count, top_5)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       data.periode,
@@ -154,86 +171,84 @@ export async function saveConversionBatch(
       data.pctMetResol,
       data.incidentCount,
       data.srCount,
+      top5Json,
     ],
   });
   
   const batchId = Number(batchResult.lastInsertRowid);
   
-  // Insert tickets in parallel chunks for speed
-  console.log(`[Turso] Inserting ${tickets.length} tickets...`);
+  // Insert all tickets + top5 in a single db.batch() call (one HTTP round-trip)
+  console.log(`[Turso] Inserting ${tickets.length} tickets via batch()...`);
   const insertStart = Date.now();
-  const CHUNK_SIZE = 10; // Insert 10 tickets in parallel per batch
   
-  for (let i = 0; i < tickets.length; i += CHUNK_SIZE) {
-    const chunk = tickets.slice(i, i + CHUNK_SIZE);
-    const chunkPromises = chunk.map(ticket => 
-      db.execute({
-        sql: `
-          INSERT INTO tickets 
+  const statements = tickets.map(ticket => ({
+    sql: `INSERT INTO tickets 
           (batch_id, no, tiket, ringkasan, rincian, pemohon, penyebab, 
            solusi, tipe, tanggal, pic, vendor, status, sla_respon, sla_resol)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `,
-        args: [
-          batchId,
-          ticket.no,
-          ticket.tiket,
-          ticket.ringkasan,
-          ticket.rincian,
-          ticket.pemohon,
-          ticket.penyebab,
-          ticket.solusi,
-          ticket.tipe,
-          ticket.tanggal,
-          ticket.pic,
-          ticket.vendor,
-          ticket.status,
-          ticket.slaRespon,
-          ticket.slaResol,
-        ],
-      })
-    );
-    await Promise.all(chunkPromises);
-    console.log(`[Turso] Inserted chunk ${i + 1}-${Math.min(i + CHUNK_SIZE, tickets.length)}`);
-  }
-  console.log(`[Turso] All tickets inserted in ${Date.now() - insertStart}ms`);
-  
-  // Insert top 5 ringkasan
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      batchId,
+      ticket.no,
+      ticket.tiket,
+      ticket.ringkasan,
+      ticket.rincian,
+      ticket.pemohon,
+      ticket.penyebab,
+      ticket.solusi,
+      ticket.tipe,
+      ticket.tanggal,
+      ticket.pic,
+      ticket.vendor,
+      ticket.status,
+      ticket.slaRespon,
+      ticket.slaResol,
+    ],
+  }));
+
+  // Add top5 ringkasan inserts to the same batch
   for (const [ringkasan, count] of top5) {
-    await db.execute({
-      sql: `
-        INSERT INTO top_ringkasan (batch_id, ringkasan, count)
-        VALUES (?, ?, ?)
-      `,
+    statements.push({
+      sql: `INSERT INTO top_ringkasan (batch_id, ringkasan, count) VALUES (?, ?, ?)`,
       args: [batchId, ringkasan, count],
     });
   }
+
+  await db.batch(statements, "write");
+  console.log(`[Turso] All ${tickets.length} tickets + ${top5.length} top5 inserted in ${Date.now() - insertStart}ms`);
   
-  console.log(`[Turso] Saved batch ${batchId} with ${tickets.length} tickets`);
   return batchId;
 }
 
 // Query functions for visualization
 export async function getAllBatches() {
   const db = getTursoClient();
-  const result = await db.execute("SELECT * FROM conversion_batches ORDER BY created_at DESC");
+  const result = await db.execute(
+    `SELECT id, periode, tanggal, total_tiket, total_pending, total_selesai,
+            incident_count, sr_count, pct_met_resp, pct_met_resol, created_at
+     FROM conversion_batches ORDER BY created_at DESC`
+  );
   return result.rows;
 }
 
 export async function getBatchById(batchId: number) {
   const db = getTursoClient();
-  const batch = await db.execute({
-    sql: "SELECT * FROM conversion_batches WHERE id = ?",
-    args: [batchId],
-  });
-  const tickets = await db.execute({
-    sql: "SELECT * FROM tickets WHERE batch_id = ? ORDER BY no",
-    args: [batchId],
-  });
-  const top5 = await db.execute({
-    sql: "SELECT * FROM top_ringkasan WHERE batch_id = ? ORDER BY count DESC",
-    args: [batchId],
-  });
+  // Run all 3 queries in parallel
+  const [batch, tickets, top5] = await Promise.all([
+    db.execute({
+      sql: "SELECT * FROM conversion_batches WHERE id = ?",
+      args: [batchId],
+    }),
+    db.execute({
+      sql: `SELECT no, tiket, ringkasan, rincian, pemohon, penyebab, solusi,
+                   tipe, tanggal, pic, vendor, status, sla_respon, sla_resol
+            FROM tickets WHERE batch_id = ? ORDER BY no`,
+      args: [batchId],
+    }),
+    db.execute({
+      sql: "SELECT ringkasan, count FROM top_ringkasan WHERE batch_id = ? ORDER BY count DESC",
+      args: [batchId],
+    }),
+  ]);
   return {
     batch: batch.rows[0],
     tickets: tickets.rows,

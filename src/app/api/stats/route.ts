@@ -31,64 +31,70 @@ export async function GET(request: NextRequest) {
     };
     batchQuery += ` ORDER BY ${sortMap[sortBy] || "created_at"} ${order.toUpperCase()}`;
 
-    const batchesResult = await db.execute({
-      sql: batchQuery,
-      args,
-    });
+    // Run all queries in parallel for maximum speed
+    const yearFilter = year ? ` WHERE periode LIKE '%${year}%'` : '';
+    const yearFilterTickets = year ? ` AND b.periode LIKE '%${year}%'` : '';
 
-    // Monthly aggregation for chart
-    const monthlyStats = await db.execute(`
-      SELECT 
-        substr(periode, -4) as year,
-        CASE 
-          WHEN periode LIKE '%Januari%' THEN '01'
-          WHEN periode LIKE '%Februari%' THEN '02'
-          WHEN periode LIKE '%Maret%' THEN '03'
-          WHEN periode LIKE '%April%' THEN '04'
-          WHEN periode LIKE '%Mei%' THEN '05'
-          WHEN periode LIKE '%Juni%' THEN '06'
-          WHEN periode LIKE '%Juli%' THEN '07'
-          WHEN periode LIKE '%Agustus%' THEN '08'
-          WHEN periode LIKE '%September%' THEN '09'
-          WHEN periode LIKE '%Oktober%' THEN '10'
-          WHEN periode LIKE '%November%' THEN '11'
-          WHEN periode LIKE '%Desember%' THEN '12'
-        END as month_num,
-        periode as month_name,
-        SUM(total_tiket) as total_tickets,
-        SUM(incident_count) as total_incidents,
-        SUM(sr_count) as total_sr,
-        AVG(CAST(REPLACE(pct_met_resp, '%', '') AS REAL)) as avg_met_resp,
-        AVG(CAST(REPLACE(pct_met_resol, '%', '') AS REAL)) as avg_met_resol
-      FROM conversion_batches
-      GROUP BY periode
-      ORDER BY year DESC, month_num DESC
-    `);
+    const [batchesResult, monthlyStats, picPerformance, categoryTrends] = await Promise.all([
+      // 1. Batches with filters
+      db.execute({ sql: batchQuery, args }),
 
-    // PIC performance across all batches
-    const picPerformance = await db.execute(`
-      SELECT 
-        t.pic,
-        COUNT(*) as ticket_count,
-        SUM(CASE WHEN t.sla_respon IN ('met', '1', 'terpenuhi', 'Met', 'MET') THEN 1 ELSE 0 END) as met_resp_count,
-        SUM(CASE WHEN t.sla_resol IN ('met', '1', 'terpenuhi', 'Met', 'MET') THEN 1 ELSE 0 END) as met_resol_count,
-        b.periode
-      FROM tickets t
-      JOIN conversion_batches b ON t.batch_id = b.id
-      GROUP BY t.pic, b.periode
-      ORDER BY ticket_count DESC
-    `);
+      // 2. Monthly aggregation for chart
+      db.execute(
+        `SELECT 
+          substr(periode, -4) as year,
+          CASE 
+            WHEN periode LIKE '%Januari%' THEN '01'
+            WHEN periode LIKE '%Februari%' THEN '02'
+            WHEN periode LIKE '%Maret%' THEN '03'
+            WHEN periode LIKE '%April%' THEN '04'
+            WHEN periode LIKE '%Mei%' THEN '05'
+            WHEN periode LIKE '%Juni%' THEN '06'
+            WHEN periode LIKE '%Juli%' THEN '07'
+            WHEN periode LIKE '%Agustus%' THEN '08'
+            WHEN periode LIKE '%September%' THEN '09'
+            WHEN periode LIKE '%Oktober%' THEN '10'
+            WHEN periode LIKE '%November%' THEN '11'
+            WHEN periode LIKE '%Desember%' THEN '12'
+          END as month_num,
+          periode as month_name,
+          SUM(total_tiket) as total_tickets,
+          SUM(incident_count) as total_incidents,
+          SUM(sr_count) as total_sr,
+          AVG(CAST(REPLACE(pct_met_resp, '%', '') AS REAL)) as avg_met_resp,
+          AVG(CAST(REPLACE(pct_met_resol, '%', '') AS REAL)) as avg_met_resol
+        FROM conversion_batches${yearFilter}
+        GROUP BY periode
+        ORDER BY year DESC, month_num DESC`
+      ),
 
-    // Category trends (top ringkasan over time)
-    const categoryTrends = await db.execute(`
-      SELECT 
-        r.ringkasan,
-        r.count,
-        b.periode
-      FROM top_ringkasan r
-      JOIN conversion_batches b ON r.batch_id = b.id
-      ORDER BY b.created_at DESC, r.count DESC
-    `);
+      // 3. PIC performance (filtered by year if provided)
+      db.execute(
+        `SELECT 
+          t.pic,
+          COUNT(*) as ticket_count,
+          SUM(CASE WHEN t.sla_respon IN ('met', '1', 'terpenuhi', 'Met', 'MET') THEN 1 ELSE 0 END) as met_resp_count,
+          SUM(CASE WHEN t.sla_resol IN ('met', '1', 'terpenuhi', 'Met', 'MET') THEN 1 ELSE 0 END) as met_resol_count,
+          b.periode
+        FROM tickets t
+        JOIN conversion_batches b ON t.batch_id = b.id
+        WHERE 1=1${yearFilterTickets}
+        GROUP BY t.pic, b.periode
+        ORDER BY ticket_count DESC`
+      ),
+
+      // 4. Category trends (filtered by year if provided)
+      db.execute(
+        `SELECT 
+          r.ringkasan,
+          r.count,
+          b.periode
+        FROM top_ringkasan r
+        JOIN conversion_batches b ON r.batch_id = b.id
+        WHERE 1=1${yearFilterTickets}
+        ORDER BY b.created_at DESC, r.count DESC`
+      ),
+    ]);
 
     return Response.json({
       batches: batchesResult.rows,

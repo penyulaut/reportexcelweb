@@ -64,7 +64,10 @@ const navItems: NavItem[] = [
   {
     name: "convert",
     icon: <TableIcon />,
-    subItems: [{ name: "Basic Tables", path: "/convertexcel", pro: false }],
+    subItems: [
+      { name: "Upload Excel", path: "/convertexcel", pro: false },
+      { name: "Log Export", path: "/logexport", pro: false },
+    ],
   },
 ];
 

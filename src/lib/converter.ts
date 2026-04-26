@@ -60,8 +60,9 @@ function escXml(s: unknown): string {
 
 function fmtPct(v: unknown): string {
   const f = Number(v);
-  if (isNaN(f) || !isFinite(f)) return "0%";
-  return `${Math.round(f <= 1 ? f * 100 : f)}%`;
+  if (isNaN(f) || !isFinite(f)) return "0.00%";
+  const pct = f <= 1 ? f * 100 : f;
+  return `${pct.toFixed(2)}%`;
 }
 
 /** Unwrap ExcelJS formula/rich-text cell values to their plain result. */
@@ -694,4 +695,20 @@ export function fillDocx(templateBuffer: any, data: ConversionData): any {
     type: "nodebuffer",
     compression: "DEFLATE",
   }) as Buffer;
+}
+
+// Export function untuk API route (Log Export feature)
+export async function generateDocxFromData(data: ConversionData): Promise<Buffer> {
+  // Load template file
+  const fs = require('fs');
+  const path = require('path');
+
+  const templatePath = path.join(process.cwd(), 'public', 'templates', 'LogDTE.docx');
+
+  if (!fs.existsSync(templatePath)) {
+    throw new Error('Template file not found: public/templates/LogDTE.docx');
+  }
+
+  const templateBuffer = fs.readFileSync(templatePath);
+  return fillDocx(templateBuffer, data);
 }

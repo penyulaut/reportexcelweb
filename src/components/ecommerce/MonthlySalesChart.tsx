@@ -24,7 +24,7 @@ export default function MonthlySalesChart() {
 
   useEffect(() => {
     let mounted = true;
-    fetch("/api/stats?year=2026")
+    fetch("/api/stats")
       .then((res) => {
         if (!res.ok) throw new Error(res.statusText);
         return res.json();
