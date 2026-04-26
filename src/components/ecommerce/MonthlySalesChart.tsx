@@ -3,15 +3,45 @@ import { ApexOptions } from "apexcharts";
 import dynamic from "next/dynamic";
 import { MoreDotIcon } from "@/icons";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
-import { useState } from "react";
+import { useState, useEffect, use } from "react";
 import { Dropdown } from "../ui/dropdown/Dropdown";
+
 
 // Dynamically import the ReactApexChart component
 const ReactApexChart = dynamic(() => import("react-apexcharts"), {
   ssr: false,
 });
 
+type MonthlyData = {
+  month: string;
+  totalTiket: number;
+};
+
 export default function MonthlySalesChart() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [salesData, setSalesData] = useState<number[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    fetch("/api/stats?year=2026")
+      .then((res) => {
+        if (!res.ok) throw new Error(res.statusText);
+        return res.json();
+      })
+      .then((payload) => {
+        if (!mounted) return;
+        const rows = payload.monthlyStats || [];
+        const months = rows.map((r: any) => r.month_name);
+        const totals = rows.map((r: any) => Number(r.total_tickets));
+        // ubah urutan jika mau Jan->Dec
+        setCategories(months.reverse());
+        setSalesData(totals.reverse());
+      })
+      .catch((err) => console.error("Error fetching monthly sales data:", err));
+    return () => { mounted = false; };
+  }, []);
+
   const options: ApexOptions = {
     colors: ["#465fff"],
     chart: {
@@ -19,7 +49,7 @@ export default function MonthlySalesChart() {
       type: "bar",
       height: 180,
       toolbar: {
-        show: false,
+        show: false, 
       },
     },
     plotOptions: {
@@ -39,20 +69,7 @@ export default function MonthlySalesChart() {
       colors: ["transparent"],
     },
     xaxis: {
-      categories: [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
-      ],
+      categories: categories,
       axisBorder: {
         show: false,
       },
@@ -93,11 +110,10 @@ export default function MonthlySalesChart() {
   };
   const series = [
     {
-      name: "Sales",
-      data: [168, 385, 201, 298, 187, 195, 291, 110, 215, 390, 280, 112],
+      name: "Total Tiket",
+      data: salesData,
     },
   ];
-  const [isOpen, setIsOpen] = useState(false);
 
   function toggleDropdown() {
     setIsOpen(!isOpen);
