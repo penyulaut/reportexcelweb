@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
     // Get tickets untuk semua batches (only needed columns)
     const ticketsQuery = `SELECT batch_id, no, tiket, ringkasan, rincian, pemohon, penyebab,
                                  solusi, tipe, tanggal, pic, vendor, status, sla_respon, sla_resol
-                          FROM tickets WHERE batch_id IN (${batchIds.map(() => "?").join(", ")}) ORDER BY no ASC`;
+                          FROM tickets WHERE batch_id IN (${batchIds.map(() => "?").join(", ")}) ORDER BY batch_id DESC, no ASC`;
     const ticketsResult = await db.execute({
       sql: ticketsQuery,
       args: batchIds,
@@ -145,8 +145,8 @@ export async function POST(request: NextRequest) {
         incidentCount: batch.incident_count as number,
         srCount: batch.sr_count as number,
         top5: JSON.parse((batch.top_5 as string) || "[]"),
-        tickets: tickets.map((t) => ({
-          no: t.no as number,
+        tickets: tickets.map((t, idx) => ({
+          no: idx + 1,
           tiket: t.tiket as string,
           ringkasan: t.ringkasan as string,
           rincian: t.rincian as string,
@@ -191,11 +191,11 @@ export async function POST(request: NextRequest) {
           top5Map.set(category, (top5Map.get(category) || 0) + count);
         }
 
-        // Collect tickets
+        // Aggregate tickets are mapped later with sequential numbers
         const tickets = ticketsByBatch.get(batch.id as number) || [];
         allTickets.push(
           ...tickets.map((t) => ({
-            no: t.no as number,
+            no: 0, // Will be re-assigned below
             tiket: t.tiket as string,
             ringkasan: t.ringkasan as string,
             rincian: t.rincian as string,
@@ -212,6 +212,11 @@ export async function POST(request: NextRequest) {
           }))
         );
       }
+      
+      // Re-number all tickets sequentially
+      allTickets.forEach((t, idx) => {
+        t.no = idx + 1;
+      });
 
       // Calculate percentages
       const pctMetResp =
@@ -382,7 +387,7 @@ export async function GET(request: NextRequest) {
 
       // Get all tickets untuk deduplication (ambil semua dulu, deduplicate, lalu limit)
       const ticketsQuery = `SELECT no, tiket, ringkasan, rincian, pemohon, solusi, tipe, tanggal, pic, sla_respon, sla_resol
-                            FROM tickets WHERE batch_id IN (${batchIds.map(() => "?").join(", ")}) ORDER BY no ASC`;
+                            FROM tickets WHERE batch_id IN (${batchIds.map(() => "?").join(", ")}) ORDER BY batch_id DESC, no ASC`;
       const ticketsResult = await db.execute({
         sql: ticketsQuery,
         args: batchIds,
@@ -414,8 +419,8 @@ export async function GET(request: NextRequest) {
       }
 
       // Ambil 5 pertama untuk preview
-      const previewTickets = uniqueTickets.slice(0, 5).map((t) => ({
-        no: t.no as number,
+      const previewTickets = uniqueTickets.slice(0, 5).map((t, idx) => ({
+        no: idx + 1,
         tiket: t.tiket as string,
         ringkasan: t.ringkasan as string,
         rincian: t.rincian as string,

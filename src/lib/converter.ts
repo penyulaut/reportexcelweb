@@ -31,6 +31,8 @@ export interface Ticket {
   status: string;
   slaRespon: string;
   slaResol: string;
+  statusRespon?: string;
+  statusResol?: string;
 }
 
 export interface ConversionData {
@@ -66,17 +68,40 @@ function fmtPct(v: unknown): string {
 }
 
 /** Unwrap ExcelJS formula/rich-text cell values to their plain result. */
-function cellVal(cell: ExcelJS.Cell): unknown {
+function cellVal(cell: ExcelJS.Cell | undefined): unknown {
+  if (!cell) return null;
   const v = cell.value;
   if (v == null) return null;
   if (v instanceof Date) return v;
-  if (typeof v === "object" && "result" in (v as object))
-    return (v as { result: unknown }).result;
-  if (typeof v === "object" && "richText" in (v as object))
-    return (v as { richText: Array<{ text: string }> }).richText
-      .map((r) => r.text)
-      .join("");
+  if (typeof v === "object") {
+    if ("result" in v) return (v as any).result;
+    if ("richText" in v) return (v as any).richText.map((r: any) => r.text).join("");
+    if ("text" in v) return (v as any).text;
+    if ("hyperlink" in v) return (v as any).hyperlink;
+  }
   return v;
+}
+
+/** Safely format cell content to a displayable string */
+function formatCellStr(cell: ExcelJS.Cell | undefined): string {
+  if (!cell) return "";
+  const v = cellVal(cell);
+  if (v == null) return "";
+  
+  if (v instanceof Date) {
+    const mm = String(v.getMonth() + 1).padStart(2, "0");
+    const dd = String(v.getDate()).padStart(2, "0");
+    const yyyy = v.getFullYear();
+    const hh = String(v.getHours()).padStart(2, "0");
+    const min = String(v.getMinutes()).padStart(2, "0");
+    return `${mm}/${dd}/${yyyy} ${hh}:${min}`;
+  }
+  
+  if (typeof v === "object") {
+    return cell.text || "";
+  }
+  
+  return String(v).trim();
 }
 
 // ── XML helpers ───────────────────────────────────────────────────────────────
@@ -278,8 +303,8 @@ function findHeaderRow(ws: ExcelJS.Worksheet): { rowNum: number; colMap: Record<
     "pic", "assignee", "handler", "penanggung jawab",
     "vendor", "supplier", "third party",
     "status",
-    "sla respon", "sla response", "responsiveness",
-    "sla resolusi", "sla resolution", "resolution time"
+    "sla respon", "sla response", "responsiveness", "respon",
+    "sla resolusi", "sla resolution", "resolution time", "resolusi"
   ];
   
   for (let r = 1; r <= Math.min(20, ws.rowCount); r++) {
@@ -309,7 +334,22 @@ function findHeaderRow(ws: ExcelJS.Worksheet): { rowNum: number; colMap: Record<
             colMap["pemohon"] = c;
           } else if (normalized.includes("penyebab") || normalized.includes("cause") || normalized.includes("alasan")) {
             colMap["penyebab"] = c;
-          } else if (normalized.includes("solusi") || normalized.includes("resolution") || normalized.includes("jawaban")) {
+          } else if (normalized === "resolusi" || (normalized.includes("sla") && (normalized.includes("resol") || normalized.includes("resolut")))) {
+            let parentHeader = "";
+            if (r > 1) {
+              const above1 = normalizeStr(cellVal(ws.getRow(r - 1).getCell(c)));
+              const above2 = c > 1 ? normalizeStr(cellVal(ws.getRow(r - 1).getCell(c - 1))) : "";
+              const above3 = c > 2 ? normalizeStr(cellVal(ws.getRow(r - 1).getCell(c - 2))) : "";
+              const above4 = c > 3 ? normalizeStr(cellVal(ws.getRow(r - 1).getCell(c - 3))) : "";
+              parentHeader = above1 || above2 || above3 || above4;
+            }
+            if (parentHeader.includes("waktu")) colMap["waktuResol"] = c;
+            else if (parentHeader.includes("sla")) colMap["slaResol"] = c;
+            else {
+              if (!colMap["waktuResol"]) colMap["waktuResol"] = c;
+              else colMap["slaResol"] = c;
+            }
+          } else if (normalized === "solusi" || (normalized.includes("solusi") && !normalized.includes("resolusi")) || (normalized.includes("resolution") && !normalized.includes("sla")) || normalized.includes("jawaban")) {
             colMap["solusi"] = c;
           } else if (normalized.includes("tipe") || normalized.includes("type") || normalized.includes("kategori")) {
             colMap["tipe"] = c;
@@ -321,10 +361,21 @@ function findHeaderRow(ws: ExcelJS.Worksheet): { rowNum: number; colMap: Record<
             colMap["vendor"] = c;
           } else if (normalized === "status") {
             colMap["status"] = c;
-          } else if (normalized.includes("sla") && (normalized.includes("respon") || normalized.includes("response"))) {
-            colMap["slaRespon"] = c;
-          } else if (normalized.includes("sla") && (normalized.includes("resol") || normalized.includes("resolut"))) {
-            colMap["slaResol"] = c;
+          } else if (normalized === "respon" || (normalized.includes("sla") && (normalized.includes("respon") || normalized.includes("response")))) {
+            let parentHeader = "";
+            if (r > 1) {
+              const above1 = normalizeStr(cellVal(ws.getRow(r - 1).getCell(c)));
+              const above2 = c > 1 ? normalizeStr(cellVal(ws.getRow(r - 1).getCell(c - 1))) : "";
+              const above3 = c > 2 ? normalizeStr(cellVal(ws.getRow(r - 1).getCell(c - 2))) : "";
+              const above4 = c > 3 ? normalizeStr(cellVal(ws.getRow(r - 1).getCell(c - 3))) : "";
+              parentHeader = above1 || above2 || above3 || above4;
+            }
+            if (parentHeader.includes("waktu")) colMap["waktuRespon"] = c;
+            else if (parentHeader.includes("sla")) colMap["slaRespon"] = c;
+            else {
+              if (!colMap["waktuRespon"]) colMap["waktuRespon"] = c;
+              else colMap["slaRespon"] = c;
+            }
           }
           matchedCount++;
           break;
@@ -334,6 +385,37 @@ function findHeaderRow(ws: ExcelJS.Worksheet): { rowNum: number; colMap: Record<
     
     // If we found at least 3 matching headers, this is likely the header row
     if (matchedCount >= 3) {
+      // Sub-headers (like Respon/Resolusi) might be in the next row due to merged cells
+      const nextRow = ws.getRow(r + 1);
+      for (let c = 1; c <= 20; c++) {
+        const cellVal_raw = cellVal(nextRow.getCell(c));
+        const normalized = normalizeStr(cellVal_raw);
+        
+        if (normalized === "respon" || normalized === "resolusi" || normalized.includes("sla")) {
+          let parentHeader = "";
+          const above1 = normalizeStr(cellVal(row.getCell(c)));
+          const above2 = c > 1 ? normalizeStr(cellVal(row.getCell(c - 1))) : "";
+          const above3 = c > 2 ? normalizeStr(cellVal(row.getCell(c - 2))) : "";
+          const above4 = c > 3 ? normalizeStr(cellVal(row.getCell(c - 3))) : "";
+          parentHeader = above1 || above2 || above3 || above4;
+          
+          if (normalized === "respon" || (normalized.includes("sla") && (normalized.includes("respon") || normalized.includes("response")))) {
+            if (parentHeader.includes("waktu")) colMap["waktuRespon"] = c;
+            else if (parentHeader.includes("sla")) colMap["slaRespon"] = c;
+            else {
+              if (!colMap["waktuRespon"]) colMap["waktuRespon"] = c;
+              else colMap["slaRespon"] = c;
+            }
+          } else if (normalized === "resolusi" || (normalized.includes("sla") && (normalized.includes("resol") || normalized.includes("resolut")))) {
+            if (parentHeader.includes("waktu")) colMap["waktuResol"] = c;
+            else if (parentHeader.includes("sla")) colMap["slaResol"] = c;
+            else {
+              if (!colMap["waktuResol"]) colMap["waktuResol"] = c;
+              else colMap["slaResol"] = c;
+            }
+          }
+        }
+      }
       return { rowNum: r, colMap };
     }
   }
@@ -386,8 +468,10 @@ export async function readXlsx(buffer: any): Promise<ConversionData> {
   const colPic = col["pic"] || 12;
   const colVendor = col["vendor"] || 13;
   const colStatus = col["status"] || 14;
-  const colSlaRespon = col["slaRespon"] || 18;
-  const colSlaResol = col["slaResol"] || 19;
+  const colWaktuRespon = col["waktuRespon"] || 15;
+  const colWaktuResol = col["waktuResol"] || 16;
+  const colSlaRespon = col["slaRespon"] || 17;
+  const colSlaResol = col["slaResol"] || 18;
 
   // Summary section: scan first 15 rows for summary labels
   const sumMap: Record<string, number> = {};
@@ -448,13 +532,14 @@ export async function readXlsx(buffer: any): Promise<ConversionData> {
     // Skip if no ticket number
     if (!tiketVal) continue;
     
-    // STRICT validation: Must be WO or INC followed by numbers
-    // Pattern: WO followed by 10-15 digits OR INC followed by 7-15 digits
+    // STRICT validation: Must be WO or INC or CRQ followed by numbers
+    // Pattern: WO followed by 10-15 digits, INC/CRQ followed by 7-15 digits
     const tiketUpper = tiketVal.toUpperCase();
     const isValidWO = /^WO\d{10,15}$/.test(tiketUpper);
     const isValidINC = /^INC\d{7,15}$/.test(tiketUpper);
+    const isValidCRQ = /^CRQ\d{7,15}$/.test(tiketUpper);
     
-    if (!isValidWO && !isValidINC) {
+    if (!isValidWO && !isValidINC && !isValidCRQ) {
       console.log(`[Converter] Row ${r}: Skipping invalid ticket format: "${tiketVal}"`);
       continue;
     }
@@ -481,18 +566,20 @@ export async function readXlsx(buffer: any): Promise<ConversionData> {
     tickets.push({
       no: sequentialNo++,
       tiket: tiketVal,
-      ringkasan: String(cellVal(row.getCell(colRingkasan)) ?? "").trim(),
-      rincian: String(cellVal(row.getCell(colRincian)) ?? "").trim(),
-      pemohon: String(cellVal(row.getCell(colPemohon)) ?? "").trim(),
-      penyebab: String(cellVal(row.getCell(colPenyebab)) ?? "").trim(),
-      solusi: String(cellVal(row.getCell(colSolusi)) ?? "").trim(),
-      tipe: String(cellVal(row.getCell(colTipe)) ?? "").trim(),
+      ringkasan: formatCellStr(row.getCell(colRingkasan)),
+      rincian: formatCellStr(row.getCell(colRincian)),
+      pemohon: formatCellStr(row.getCell(colPemohon)),
+      penyebab: formatCellStr(row.getCell(colPenyebab)),
+      solusi: formatCellStr(row.getCell(colSolusi)),
+      tipe: formatCellStr(row.getCell(colTipe)),
       tanggal: tglStr,
-      pic: String(cellVal(row.getCell(colPic)) ?? "").trim(),
-      vendor: String(cellVal(row.getCell(colVendor)) ?? "").trim(),
-      status: String(cellVal(row.getCell(colStatus)) ?? "").trim(),
-      slaRespon: String(cellVal(row.getCell(colSlaRespon)) ?? "").trim(),
-      slaResol: String(cellVal(row.getCell(colSlaResol)) ?? "").trim(),
+      pic: formatCellStr(row.getCell(colPic)),
+      vendor: formatCellStr(row.getCell(colVendor)),
+      status: formatCellStr(row.getCell(colStatus)),
+      slaRespon: formatCellStr(row.getCell(colWaktuRespon)),
+      slaResol: formatCellStr(row.getCell(colWaktuResol)),
+      statusRespon: formatCellStr(row.getCell(colSlaRespon)),
+      statusResol: formatCellStr(row.getCell(colSlaResol)),
     });
   }
 
@@ -522,16 +609,16 @@ export async function readXlsx(buffer: any): Promise<ConversionData> {
     periode = `${MONTHS_ID[earliest.getMonth() + 1]} ${earliest.getFullYear()}`;
   }
 
-  // Count incident vs Service Request based on ticket prefix
-  // INC = Incident, WO = Service Request (Work Order)
+  // Count incident vs Service Request based on "tipe" field
+  // IN = Incident, SR = Service Request
   let incidentCount = 0;
   let srCount = 0;
   
   for (const t of tickets) {
-    const tiketCode = t.tiket.trim().toUpperCase();
-    if (tiketCode.startsWith("INC")) {
+    const tipeCode = t.tipe.trim().toUpperCase();
+    if (tipeCode === "IN" || tipeCode.includes("INCIDENT")) {
       incidentCount++;
-    } else if (tiketCode.startsWith("WO")) {
+    } else if (tipeCode === "SR" || tipeCode.includes("SERVICE REQUEST")) {
       srCount++;
     }
   }
@@ -539,10 +626,26 @@ export async function readXlsx(buffer: any): Promise<ConversionData> {
   // Manually calculate SLA based on tickets data (1/Terpenuhi/Met = 1, otherwise 0/Missed)
   let totalMetResp = 0;
   let totalMetResol = 0;
+  let totalPending = 0;
   
   for (const t of tickets) {
-    const respon = t.slaRespon.trim().toLowerCase();
-    const resol = t.slaResol.trim().toLowerCase();
+    const respon = t.statusRespon?.trim().toLowerCase() || "";
+    const resol = t.statusResol?.trim().toLowerCase() || "";
+    
+    // Check pending condition: respon exists but resol is empty, or explicitly "pending"
+    let isPending = false;
+    if (respon !== "" && resol === "") {
+      isPending = true;
+    } else if (resol === "pending" || respon === "pending") {
+      isPending = true;
+    }
+    
+    if (isPending) {
+      totalPending++;
+      if (t.slaResol.trim() === "") {
+        t.slaResol = "Pending";
+      }
+    }
     
     if (respon === "met" || respon === "1" || respon === "terpenuhi") {
       totalMetResp++;
@@ -554,8 +657,8 @@ export async function readXlsx(buffer: any): Promise<ConversionData> {
 
   const validTickets = tickets.length;
   
-  // Calculate totals from actual data (not from Excel sumMap which may be wrong)
-  const totalSelesai = validTickets; // All valid tickets are considered completed
+  // Calculate totals from actual data
+  const totalSelesai = validTickets - totalPending;
   const denominator = totalSelesai > 0 ? totalSelesai : 1;
   
   const pctMetResp = totalMetResp / denominator;
@@ -569,9 +672,9 @@ export async function readXlsx(buffer: any): Promise<ConversionData> {
   return {
     periode,
     tanggal,
-    totalTiket: validTickets,     // Use actual count (146), not Excel's 190
-    totalPending: 0,                 // All valid tickets are completed
-    totalSelesai: totalSelesai,    // Same as totalTiket
+    totalTiket: validTickets,
+    totalPending: totalPending,
+    totalSelesai: totalSelesai,
     totalMetResp: totalMetResp,    // Counted from actual ticket data
     totalMetResol: totalMetResol,  // Counted from actual ticket data
     pctMetResp: fmtPct(pctMetResp),
