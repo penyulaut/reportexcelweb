@@ -5,6 +5,9 @@ import { MoreDotIcon } from "@/icons";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
 import { useState, useEffect, use } from "react";
 import { Dropdown } from "../ui/dropdown/Dropdown";
+import flatpickr from "flatpickr";
+import ChartTab from "../common/ChartTab";
+import { CalenderIcon } from "../../icons";
 
 
 // Dynamically import the ReactApexChart component
@@ -55,7 +58,7 @@ export default function MonthlySalesChart() {
     plotOptions: {
       bar: {
         horizontal: false,
-        columnWidth: "39%",
+        columnWidth: "10%",
         borderRadius: 5,
         borderRadiusApplication: "end",
       },
@@ -125,35 +128,28 @@ export default function MonthlySalesChart() {
 
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white px-5 pt-5 dark:border-gray-800 dark:bg-white/3 sm:px-6 sm:pt-6">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">
-          Report Perbulan
-        </h3>
-
-        <div className="relative inline-block">
-          <button onClick={toggleDropdown} className="dropdown-toggle">
-            <MoreDotIcon className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" />
-          </button>
-          <Dropdown
-            isOpen={isOpen}
-            onClose={closeDropdown}
-            className="w-40 p-2"
-          >
-            <DropdownItem
-              onItemClick={closeDropdown}
-              className="flex w-full font-normal text-left text-gray-500 rounded-lg hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
-            >
-              View More
-            </DropdownItem>
-            <DropdownItem
-              onItemClick={closeDropdown}
-              className="flex w-full font-normal text-left text-gray-500 rounded-lg hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
-            >
-              Delete
-            </DropdownItem>
-          </Dropdown>
+      <div className="flex flex-col gap-5 mb-6 sm:flex-row sm:justify-between">
+        <div className="w-full">
+          <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">
+            Report Perbulan
+          </h3>
+          <p className="mt-1 text-gray-500 text-theme-sm dark:text-gray-400">
+            Lihat Report Total Tiket yang sudah dibuat perbulan
+          </p>
+        </div>
+        <div className="flex items-center gap-3 sm:justify-end">
+          <ChartTab />
+          <div className="relative inline-flex items-center">
+            <CalenderIcon className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 lg:left-3 lg:top-1/2 lg:translate-x-0 lg:-translate-y-1/2  text-gray-500 dark:text-gray-400 pointer-events-none z-10" />
+            <input
+              // ref={datePickerRef}
+              className="h-10 w-10 lg:w-40 lg:h-auto  lg:pl-10 lg:pr-3 lg:py-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-transparent lg:text-gray-700 outline-none dark:border-gray-700 dark:bg-gray-800 dark:lg:text-gray-300 cursor-pointer"
+              placeholder="Select date range"
+            />
+          </div>
         </div>
       </div>
+      
 
       <div className="max-w-full overflow-x-auto custom-scrollbar">
         <div className="-ml-5 min-w-[650px] xl:min-w-full pl-2">

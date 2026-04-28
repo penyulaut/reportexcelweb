@@ -91,35 +91,35 @@ export const EcommerceMetrics = () => {
         title="Total Tiket"
         value={loading ? "…" : fmt(totals.totalTiket)}
         icon={<GroupIcon className="text-gray-800 size-6 dark:text-white/90" />}
-        badge={<ArrowUpIcon />}
+        // badge={<ArrowUpIcon />}
       />
 
       <Card
         title="Total Pending"
         value={loading ? "…" : fmt(totals.totalPending)}
         icon={<BoxIconLine className="text-gray-800 dark:text-white/90" />}
-        badge={<ArrowDownIcon className="text-error-500" />}
+        // badge={<ArrowDownIcon className="text-error-500" />}
       />
 
       <Card
         title="Total Tiket Selesai"
         value={loading ? "…" : fmt(totals.totalSelesai)}
         icon={<BoxIconLine className="text-gray-800 dark:text-white/90" />}
-        badge={<ArrowDownIcon className="text-error-500" />}
+        // badge={<ArrowDownIcon className="text-error-500" />}
       />
 
       <Card
         title="Total Met Response"
         value={loading ? "…" : fmt(totals.totalMetResp)}
         icon={<BoxIconLine className="text-gray-800 dark:text-white/90" />}
-        badge={<ArrowDownIcon className="text-error-500" />}
+        // badge={<ArrowDownIcon className="text-error-500" />}
       />
 
       <Card
         title="Total Met Resolution"
         value={loading ? "…" : fmt(totals.totalMetResol)}
         icon={<BoxIconLine className="text-gray-800 dark:text-white/90" />}
-        badge={<ArrowDownIcon className="text-error-500" />}
+        // badge={<ArrowDownIcon className="text-error-500" />}
       />
 
       {error && (
@@ -135,12 +135,12 @@ function Card({
   title,
   value,
   icon,
-  badge,
+  // badge,
 }: {
   title: string;
   value: string;
   icon: React.ReactNode;
-  badge: React.ReactNode;
+  // badge: React.ReactNode;
 }) {
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/3 md:p-6">
@@ -158,7 +158,7 @@ function Card({
           </h4>
         </div>
 
-        <Badge color="error">{badge}</Badge>
+        {/* <Badge color="error">{badge}</Badge> */}
       </div>
     </div>
   );

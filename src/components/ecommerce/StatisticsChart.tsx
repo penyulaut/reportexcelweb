@@ -157,7 +157,7 @@ export default function StatisticsChart() {
             Target you've set for each month
           </p>
         </div>
-        <div className="flex items-center gap-3 sm:justify-end">
+        {/* <div className="flex items-center gap-3 sm:justify-end">
           <ChartTab />
           <div className="relative inline-flex items-center">
             <CalenderIcon className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 lg:left-3 lg:top-1/2 lg:translate-x-0 lg:-translate-y-1/2  text-gray-500 dark:text-gray-400 pointer-events-none z-10" />
@@ -167,7 +167,7 @@ export default function StatisticsChart() {
               placeholder="Select date range"
             />
           </div>
-        </div>
+        </div> */}
       </div>
 
       <div className="max-w-full overflow-x-auto custom-scrollbar">
