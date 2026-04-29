@@ -51,6 +51,16 @@ export async function initDatabase() {
     } catch {
       // Column already exists, ignore
     }
+
+    // Table for users (authentication)
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
   
   // Table for individual tickets
   await db.execute(`
@@ -228,6 +238,15 @@ export async function getAllBatches() {
      FROM conversion_batches ORDER BY created_at DESC`
   );
   return result.rows;
+}
+
+export async function getUserByUsername(username: string) {
+  const db = getTursoClient();
+  const result = await db.execute({
+    sql: "SELECT id, username, password FROM users WHERE username = ?",
+    args: [username],
+  });
+  return result.rows[0];
 }
 
 export async function getBatchById(batchId: number) {

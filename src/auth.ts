@@ -1,17 +1,17 @@
 import NextAuth from "next-auth";
-import Google from "next-auth/providers/google";
+import Credentials from "next-auth/providers/credentials";
 import type { JWT } from "next-auth/jwt";
-import type { Session, Account, Profile } from "next-auth";
+import type { Session } from "next-auth";
+import bcrypt from "bcryptjs";
+import { getUserByUsername } from "@/lib/turso";
 
 // Extend the session type
 declare module "next-auth" {
   interface Session {
-    accessToken?: string;
     user: {
       id?: string;
       name?: string | null;
-      email?: string | null;
-      image?: string | null;
+      username?: string | null;
     };
   }
 }
@@ -19,11 +19,8 @@ declare module "next-auth" {
 // Extend the JWT type
 declare module "next-auth/jwt" {
   interface JWT {
-    accessToken?: string;
     id?: string;
-    email?: string;
-    name?: string;
-    image?: string;
+    username?: string;
   }
 }
 
@@ -34,45 +31,60 @@ export const {
   signOut,
 } = NextAuth({
   providers: [
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      authorization: {
-        params: {
-          prompt: "consent",
-          access_type: "offline",
-          response_type: "code",
-        },
+    Credentials({
+      name: "Credentials",
+      credentials: {
+        username: { label: "Username", type: "text" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(credentials) {
+        if (!credentials?.username || !credentials?.password) {
+          return null;
+        }
+
+        try {
+          // Find user by username in DB
+          const user = await getUserByUsername(credentials.username as string);
+          
+          if (!user) {
+            return null; // User not found
+          }
+
+          // Check password
+          const passwordsMatch = await bcrypt.compare(
+            credentials.password as string,
+            user.password as string
+          );
+
+          if (passwordsMatch) {
+            return {
+              id: user.id?.toString() as string,
+              name: user.username as string,
+              username: user.username as string,
+            };
+          }
+        } catch (error) {
+          console.error("Auth error:", error);
+        }
+
+        return null;
       },
     }),
   ],
   callbacks: {
-    async signIn({ account, profile }: { account: Account | null; profile?: Profile & { email?: string; name?: string; picture?: string } }) {
-      // Optional: Restrict to specific domain
-      // if (profile?.email?.endsWith("@yourcompany.com")) {
-      //   return true;
-      // }
-      // return false;
-      return true;
-    },
-    async jwt({ token, account, profile }: { token: JWT; account: Account | null; profile?: Profile & { email?: string; name?: string; picture?: string } }) {
-      if (account && profile) {
-        token.accessToken = account.access_token;
-        token.id = profile.sub ?? undefined;
-        token.email = profile.email ?? undefined;
-        token.name = profile.name ?? undefined;
-        token.image = profile.picture ?? undefined;
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+        token.username = (user as any).username;
       }
       return token;
     },
-    async session({ session, token }: { session: Session; token: JWT }) {
+    async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id;
-        session.user.email = token.email;
-        session.user.name = token.name;
-        session.user.image = token.image;
+        session.user.username = token.username;
+        session.user.name = token.username;
       }
-      session.accessToken = token.accessToken;
       return session;
     },
   },
