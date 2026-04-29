@@ -213,6 +213,19 @@ export async function POST(request: NextRequest) {
         );
       }
       
+      // Sort combined tickets by date ascending (parsing DD/MM/YYYY)
+      allTickets.sort((a, b) => {
+        const [d1, m1, y1] = a.tanggal.split('/');
+        const [d2, m2, y2] = b.tanggal.split('/');
+        
+        if (!y1 || !y2) return a.tanggal.localeCompare(b.tanggal);
+        
+        const dateA = new Date(Number(y1), Number(m1) - 1, Number(d1));
+        const dateB = new Date(Number(y2), Number(m2) - 1, Number(d2));
+        
+        return dateA.getTime() - dateB.getTime();
+      });
+
       // Re-number all tickets sequentially
       allTickets.forEach((t, idx) => {
         t.no = idx + 1;

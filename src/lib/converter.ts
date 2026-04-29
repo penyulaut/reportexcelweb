@@ -87,7 +87,7 @@ function formatCellStr(cell: ExcelJS.Cell | undefined): string {
   if (!cell) return "";
   const v = cellVal(cell);
   if (v == null) return "";
-  
+
   if (v instanceof Date) {
     const mm = String(v.getMonth() + 1).padStart(2, "0");
     const dd = String(v.getDate()).padStart(2, "0");
@@ -96,11 +96,11 @@ function formatCellStr(cell: ExcelJS.Cell | undefined): string {
     const min = String(v.getMinutes()).padStart(2, "0");
     return `${mm}/${dd}/${yyyy} ${hh}:${min}`;
   }
-  
+
   if (typeof v === "object") {
     return cell.text || "";
   }
-  
+
   return String(v).trim();
 }
 
@@ -151,13 +151,13 @@ function rowRanges(tblXml: string): Range[] {
   let nestDepth = 0; // depth relative to the outer table (already inside it)
 
   while (i < tblXml.length) {
-    if (tblXml.startsWith("<w:tbl>", i) || tblXml.startsWith("<w:tbl ", i)) { 
-      if (i > 0) nestDepth++; 
-      i++; continue; 
+    if (tblXml.startsWith("<w:tbl>", i) || tblXml.startsWith("<w:tbl ", i)) {
+      if (i > 0) nestDepth++;
+      i++; continue;
     }
-    if (tblXml.startsWith("</w:tbl>", i)) { 
-      if (i < tblXml.length - 8) nestDepth--; 
-      i++; continue; 
+    if (tblXml.startsWith("</w:tbl>", i)) {
+      if (i < tblXml.length - 8) nestDepth--;
+      i++; continue;
     }
     // Top-level row start
     if (
@@ -294,7 +294,7 @@ function findHeaderRow(ws: ExcelJS.Worksheet): { rowNum: number; colMap: Record<
   const knownHeaders = [
     "no", "tiket", "nomor tiket", "ticket", "no. tiket",
     "ringkasan", "summary", "keterangan", "uraian",
-    "rincian", "detail", "komentar", 
+    "rincian", "detail", "komentar",
     "pemohon", "requester", "user", "pengguna",
     "penyebab", "cause", "alasan",
     "solusi", "resolution", "jawaban",
@@ -306,17 +306,17 @@ function findHeaderRow(ws: ExcelJS.Worksheet): { rowNum: number; colMap: Record<
     "sla respon", "sla response", "responsiveness", "respon",
     "sla resolusi", "sla resolution", "resolution time", "resolusi"
   ];
-  
+
   for (let r = 1; r <= Math.min(20, ws.rowCount); r++) {
     const row = ws.getRow(r);
     const colMap: Record<string, number> = {};
     let matchedCount = 0;
-    
+
     // Check each cell in this row
     for (let c = 1; c <= 20; c++) {
       const cellVal_raw = cellVal(row.getCell(c));
       const normalized = normalizeStr(cellVal_raw);
-      
+
       for (const header of knownHeaders) {
         if (normalized === header || normalized.includes(header)) {
           // Map to standard key - BE SPECIFIC to avoid conflicts
@@ -382,7 +382,7 @@ function findHeaderRow(ws: ExcelJS.Worksheet): { rowNum: number; colMap: Record<
         }
       }
     }
-    
+
     // If we found at least 3 matching headers, this is likely the header row
     if (matchedCount >= 3) {
       // Sub-headers (like Respon/Resolusi) might be in the next row due to merged cells
@@ -390,7 +390,7 @@ function findHeaderRow(ws: ExcelJS.Worksheet): { rowNum: number; colMap: Record<
       for (let c = 1; c <= 20; c++) {
         const cellVal_raw = cellVal(nextRow.getCell(c));
         const normalized = normalizeStr(cellVal_raw);
-        
+
         if (normalized === "respon" || normalized === "resolusi" || normalized.includes("sla")) {
           let parentHeader = "";
           const above1 = normalizeStr(cellVal(row.getCell(c)));
@@ -398,7 +398,7 @@ function findHeaderRow(ws: ExcelJS.Worksheet): { rowNum: number; colMap: Record<
           const above3 = c > 2 ? normalizeStr(cellVal(row.getCell(c - 2))) : "";
           const above4 = c > 3 ? normalizeStr(cellVal(row.getCell(c - 3))) : "";
           parentHeader = above1 || above2 || above3 || above4;
-          
+
           if (normalized === "respon" || (normalized.includes("sla") && (normalized.includes("respon") || normalized.includes("response")))) {
             if (parentHeader.includes("waktu")) colMap["waktuRespon"] = c;
             else if (parentHeader.includes("sla")) colMap["slaRespon"] = c;
@@ -425,7 +425,7 @@ function findHeaderRow(ws: ExcelJS.Worksheet): { rowNum: number; colMap: Record<
 export async function readXlsx(buffer: any): Promise<ConversionData> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer);
-  
+
   // Find worksheet: priority exact "All", then any containing "All" (case insensitive)
   let ws = wb.getWorksheet("All");
   if (!ws) {
@@ -451,10 +451,10 @@ export async function readXlsx(buffer: any): Promise<ConversionData> {
   if (!headerInfo) {
     throw new Error("Tidak dapat menemukan baris header di file Excel. Pastikan file memiliki kolom seperti: No, Tiket, Ringkasan, dll.");
   }
-  
+
   const headerRow = headerInfo.rowNum;
   const col = headerInfo.colMap;
-  
+
   // Default column positions if not found
   const colSeqNo = col["seqNo"] || 3;  // Sequential number (1, 2, 3...)
   const colTiket = col["tiket"] || 4;  // Ticket ID (WO000..., INC000...)
@@ -476,16 +476,16 @@ export async function readXlsx(buffer: any): Promise<ConversionData> {
   // Summary section: scan first 15 rows for summary labels
   const sumMap: Record<string, number> = {};
   const summaryLabels = ["total", "pending", "selesai", "completed", "finished", "incident", "service", "work order"];
-  
+
   for (let r = 1; r <= Math.min(15, headerRow - 1); r++) {
     const row = ws.getRow(r);
     for (let c = 1; c <= 10; c++) {
       const label = String(cellVal(row.getCell(c)) ?? "").trim();
       const normalizedLabel = label.toLowerCase();
-      
+
       // Check if this looks like a summary label
       const isSummaryLabel = summaryLabels.some(sl => normalizedLabel.includes(sl));
-      
+
       if (isSummaryLabel && label) {
         // Look for value in adjacent columns
         for (let vc = c + 1; vc <= c + 3 && vc <= 15; vc++) {
@@ -512,12 +512,12 @@ export async function readXlsx(buffer: any): Promise<ConversionData> {
 
   for (let r = headerRow + 1; r <= ws.rowCount; r++) {
     const row = ws.getRow(r);
-    
+
     // Get ticket number (required field)
     const tiketVal = String(cellVal(row.getCell(colTiket)) ?? "").trim();
     const picVal = String(cellVal(row.getCell(colPic)) ?? "").trim();
     const statusVal = String(cellVal(row.getCell(colStatus)) ?? "").trim();
-    
+
     // Check if this is a ghost/empty row (multiple empty fields)
     if (!tiketVal && !picVal && !statusVal) {
       emptyRowCount++;
@@ -528,22 +528,22 @@ export async function readXlsx(buffer: any): Promise<ConversionData> {
       continue;
     }
     emptyRowCount = 0; // Reset counter when we find valid data
-    
+
     // Skip if no ticket number
     if (!tiketVal) continue;
-    
+
     // STRICT validation: Must be WO or INC or CRQ followed by numbers
     // Pattern: WO followed by 10-15 digits, INC/CRQ followed by 7-15 digits
     const tiketUpper = tiketVal.toUpperCase();
     const isValidWO = /^WO\d{10,15}$/.test(tiketUpper);
     const isValidINC = /^INC\d{7,15}$/.test(tiketUpper);
     const isValidCRQ = /^CRQ\d{7,15}$/.test(tiketUpper);
-    
+
     if (!isValidWO && !isValidINC && !isValidCRQ) {
       console.log(`[Converter] Row ${r}: Skipping invalid ticket format: "${tiketVal}"`);
       continue;
     }
-    
+
     // Check for duplicates
     if (seenTickets.has(tiketUpper)) {
       console.log(`[Converter] Row ${r}: Skipping duplicate ticket: "${tiketVal}"`);
@@ -586,11 +586,8 @@ export async function readXlsx(buffer: any): Promise<ConversionData> {
   console.log(`[Converter] Total valid tickets: ${tickets.length}`);
   console.log(`[Converter] Summary map:`, sumMap);
 
-  // Sort primary by PIC (worker id) then original ticket number, then re-number
-  tickets.sort(
-    (a, b) =>
-      a.pic.toLowerCase().localeCompare(b.pic.toLowerCase()) || a.no - b.no
-  );
+  // Sort by original ticket number (Excel row order)
+  tickets.sort((a, b) => a.no - b.no);
   tickets.forEach((t, i) => { t.no = i + 1; });
 
   // Top 5 ringkasan by frequency
@@ -613,7 +610,7 @@ export async function readXlsx(buffer: any): Promise<ConversionData> {
   // IN = Incident, SR = Service Request
   let incidentCount = 0;
   let srCount = 0;
-  
+
   for (const t of tickets) {
     const tipeCode = t.tipe.trim().toUpperCase();
     if (tipeCode === "IN" || tipeCode.includes("INCIDENT")) {
@@ -627,11 +624,11 @@ export async function readXlsx(buffer: any): Promise<ConversionData> {
   let totalMetResp = 0;
   let totalMetResol = 0;
   let totalPending = 0;
-  
+
   for (const t of tickets) {
     const respon = t.statusRespon?.trim().toLowerCase() || "";
     const resol = t.statusResol?.trim().toLowerCase() || "";
-    
+
     // Check pending condition: respon exists but resol is empty, or explicitly "pending"
     let isPending = false;
     if (respon !== "" && resol === "") {
@@ -639,14 +636,14 @@ export async function readXlsx(buffer: any): Promise<ConversionData> {
     } else if (resol === "pending" || respon === "pending") {
       isPending = true;
     }
-    
+
     if (isPending) {
       totalPending++;
       if (t.slaResol.trim() === "") {
         t.slaResol = "Pending";
       }
     }
-    
+
     if (respon === "met" || respon === "1" || respon === "terpenuhi") {
       totalMetResp++;
     }
@@ -656,11 +653,11 @@ export async function readXlsx(buffer: any): Promise<ConversionData> {
   }
 
   const validTickets = tickets.length;
-  
+
   // Calculate totals from actual data
   const totalSelesai = validTickets - totalPending;
   const denominator = totalSelesai > 0 ? totalSelesai : 1;
-  
+
   const pctMetResp = totalMetResp / denominator;
   const pctMetResol = totalMetResol / denominator;
 
@@ -696,7 +693,7 @@ export function fillDocx(templateBuffer: any, data: ConversionData): any {
   for (const filename of Object.keys(zip.files)) {
     if (!/^word\/header\d+\.xml$/.test(filename)) continue;
     let xml = zip.files[filename].asText();
-    
+
     // Header relies on table cells. The first table is the header block.
     // Row 1, Col 6 = Periode
     // Row 2, Col 6 = Tanggal
@@ -704,13 +701,13 @@ export function fillDocx(templateBuffer: any, data: ConversionData): any {
     if (tables.length > 0) {
       const htPos = tables[0];
       let htXml = xml.slice(htPos.start, htPos.end);
-      
+
       let hrng = rowRanges(htXml);
       if (hrng.length > 2) {
         htXml = updateCell(htXml, 1, 6, data.periode, hrng);
         hrng = rowRanges(htXml); // refresh
         htXml = updateCell(htXml, 2, 6, data.tanggal, hrng);
-        
+
         xml = xml.slice(0, htPos.start) + htXml + xml.slice(htPos.end);
         zip.file(filename, xml);
       }
@@ -727,16 +724,16 @@ export function fillDocx(templateBuffer: any, data: ConversionData): any {
     const dtXml = docXml.slice(dtPos.start, dtPos.end);
     const rrng = rowRanges(dtXml);
     const HEADER_ROWS = 2; // Rows 0 and 1 are headers
-    
+
     if (rrng.length > HEADER_ROWS) {
       // Use first empty row (row 2) as format template
       const templateRow = dtXml.slice(rrng[HEADER_ROWS].start, rrng[HEADER_ROWS].end);
       const newRows = data.tickets.map((t) => buildDetailRow(templateRow, t)).join("");
-      
+
       const beforeData = dtXml.slice(0, rrng[HEADER_ROWS].start);
       const afterData = dtXml.slice(rrng[rrng.length - 1].end); // trim remaining empty rows
       const newDtXml = beforeData + newRows + afterData;
-      
+
       docXml = docXml.slice(0, dtPos.start) + newDtXml + docXml.slice(dtPos.end);
     }
   }
