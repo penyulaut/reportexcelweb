@@ -40,45 +40,86 @@ export const EcommerceMetrics = () => {
     let mounted = true;
     setLoading(true);
 
-    fetch("/api/stats")
-      .then((r) => r.json())
-      .then((data: ApiResponse) => {
-        if (!mounted) return;
+    const doFetch = () => {
+      return fetch("/api/stats")
+        .then((r) => r.json())
+        .then((data: ApiResponse) => {
+          if (!mounted) return;
 
-        const batches: Batch[] = Array.isArray(data?.batches)
-          ? data.batches
-          : [];
+          const batches: Batch[] = Array.isArray(data?.batches)
+            ? data.batches
+            : [];
 
-        const sums = batches.reduce(
-          (acc: Totals, b: Batch) => {
-            acc.totalTiket += Number(b.total_tiket ?? 0);
-            acc.totalPending += Number(b.total_pending ?? 0);
-            acc.totalSelesai += Number(b.total_selesai ?? 0);
-            acc.totalMetResp += Number(b.total_met_resp ?? 0);
-            acc.totalMetResol += Number(b.total_met_resol ?? 0);
-            return acc;
-          },
-          {
-            totalTiket: 0,
-            totalPending: 0,
-            totalSelesai: 0,
-            totalMetResp: 0,
-            totalMetResol: 0,
-          }
-        );
+          const sums = batches.reduce(
+            (acc: Totals, b: Batch) => {
+              acc.totalTiket += Number(b.total_tiket ?? 0);
+              acc.totalPending += Number(b.total_pending ?? 0);
+              acc.totalSelesai += Number(b.total_selesai ?? 0);
+              acc.totalMetResp += Number(b.total_met_resp ?? 0);
+              acc.totalMetResol += Number(b.total_met_resol ?? 0);
+              return acc;
+            },
+            {
+              totalTiket: 0,
+              totalPending: 0,
+              totalSelesai: 0,
+              totalMetResp: 0,
+              totalMetResol: 0,
+            }
+          );
 
-        setTotals(sums);
-      })
-      .catch((err) => {
-        console.error("/api/stats error", err);
-        setError(String(err));
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
+          setTotals(sums);
+        })
+        .catch((err) => {
+          console.error("/api/stats error", err);
+          if (mounted) setError(String(err));
+        })
+        .finally(() => {
+          if (mounted) setLoading(false);
+        });
+    };
+
+    doFetch();
+
+    // Listen for updates dispatched by charts
+    const handler = (e: Event) => {
+      try {
+        const detail: any = (e as CustomEvent).detail;
+        const batches: Batch[] = detail?.payload?.batches ?? null;
+        if (batches) {
+          const sums = batches.reduce(
+            (acc: Totals, b: Batch) => {
+              acc.totalTiket += Number(b.total_tiket ?? 0);
+              acc.totalPending += Number(b.total_pending ?? 0);
+              acc.totalSelesai += Number(b.total_selesai ?? 0);
+              acc.totalMetResp += Number(b.total_met_resp ?? 0);
+              acc.totalMetResol += Number(b.total_met_resol ?? 0);
+              return acc;
+            },
+            {
+              totalTiket: 0,
+              totalPending: 0,
+              totalSelesai: 0,
+              totalMetResp: 0,
+              totalMetResol: 0,
+            }
+          );
+          setTotals(sums);
+        } else if (detail?.range || detail?.year) {
+          // fallback: refetch if event doesn't include payload
+          setLoading(true);
+          doFetch();
+        }
+      } catch (err) {
+        // ignore
+      }
+    };
+
+    window.addEventListener("statsRangeChanged", handler as EventListener);
 
     return () => {
       mounted = false;
+      window.removeEventListener("statsRangeChanged", handler as EventListener);
     };
   }, []);
 
