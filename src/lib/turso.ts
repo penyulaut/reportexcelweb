@@ -81,6 +81,8 @@ export async function initDatabase() {
       status TEXT,
       sla_respon TEXT,
       sla_resol TEXT,
+      status_respon TEXT,
+      status_resol TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (batch_id) REFERENCES conversion_batches(id)
     )
@@ -97,6 +99,18 @@ export async function initDatabase() {
       FOREIGN KEY (batch_id) REFERENCES conversion_batches(id)
     )
   `);
+
+  // Migration: add status_respon and status_resol columns if missing
+  try {
+    await db.execute(`ALTER TABLE tickets ADD COLUMN status_respon TEXT`);
+  } catch {
+    // Column already exists, ignore
+  }
+  try {
+    await db.execute(`ALTER TABLE tickets ADD COLUMN status_resol TEXT`);
+  } catch {
+    // Column already exists, ignore
+  }
 
   // Performance indexes
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_tickets_batch_id ON tickets(batch_id)`);
@@ -150,6 +164,8 @@ export interface Ticket {
   status: string;
   slaRespon: string;
   slaResol: string;
+  statusRespon?: string;
+  statusResol?: string;
 }
 
 export async function saveConversionBatch(
@@ -194,8 +210,9 @@ export async function saveConversionBatch(
   const statements = tickets.map(ticket => ({
     sql: `INSERT INTO tickets 
           (batch_id, no, tiket, ringkasan, rincian, pemohon, penyebab, 
-           solusi, tipe, tanggal, pic, vendor, status, sla_respon, sla_resol)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           solusi, tipe, tanggal, pic, vendor, status, sla_respon, sla_resol,
+           status_respon, status_resol)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       batchId,
       ticket.no,
@@ -212,6 +229,8 @@ export async function saveConversionBatch(
       ticket.status,
       ticket.slaRespon,
       ticket.slaResol,
+      ticket.statusRespon || "",
+      ticket.statusResol || "",
     ],
   }));
 

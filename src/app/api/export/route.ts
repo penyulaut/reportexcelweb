@@ -90,9 +90,10 @@ export async function POST(request: NextRequest) {
     // Ambil semua batch IDs
     const batchIds = batchResult.rows.map((row) => row.id as number);
 
-    // Get tickets untuk semua batches (only needed columns)
+    // Get tickets untuk semua batches (including status_respon/status_resol for SLA calc)
     const ticketsQuery = `SELECT batch_id, no, tiket, ringkasan, rincian, pemohon, penyebab,
-                                 solusi, tipe, tanggal, pic, vendor, status, sla_respon, sla_resol
+                                 solusi, tipe, tanggal, pic, vendor, status, sla_respon, sla_resol,
+                                 status_respon, status_resol
                           FROM tickets WHERE batch_id IN (${batchIds.map(() => "?").join(", ")}) ORDER BY batch_id DESC, no ASC`;
     const ticketsResult = await db.execute({
       sql: ticketsQuery,
@@ -110,176 +111,151 @@ export async function POST(request: NextRequest) {
     }
     const uniqueTickets = Array.from(uniqueTicketsMap.values());
 
-    // Group tickets by batch untuk processing
-    const ticketsByBatch = new Map<number, typeof ticketsResult.rows>();
-    for (const ticket of uniqueTickets) {
-      const bid = ticket.batch_id as number;
-      if (!ticketsByBatch.has(bid)) {
-        ticketsByBatch.set(bid, []);
+    // Check if status_respon/status_resol data is available (new data has it, old data doesn't)
+    const hasStatusColumns = uniqueTickets.some(
+      (t) => (t.status_respon as string || "") !== "" || (t.status_resol as string || "") !== ""
+    );
+
+    // Recalculate ALL summary stats from deduplicated tickets
+    // (stored batch stats may include duplicates)
+
+    // Map deduplicated tickets to ConversionData format (with status for SLA calc)
+    const allTickets = uniqueTickets.map((t) => ({
+      no: 0, // Will be re-assigned below
+      tiket: t.tiket as string,
+      ringkasan: t.ringkasan as string,
+      rincian: t.rincian as string,
+      pemohon: t.pemohon as string,
+      penyebab: t.penyebab as string,
+      solusi: t.solusi as string,
+      tipe: t.tipe as string,
+      tanggal: t.tanggal as string,
+      pic: t.pic as string,
+      vendor: t.vendor as string,
+      status: t.status as string,
+      slaRespon: t.sla_respon as string,
+      slaResol: t.sla_resol as string,
+      // Carry status columns for SLA calculation (not in ConversionData but needed here)
+      _statusRespon: ((t.status_respon as string) || "").trim().toLowerCase(),
+      _statusResol: ((t.status_resol as string) || "").trim().toLowerCase(),
+    }));
+
+    // Sort by date ascending (parsing DD/MM/YYYY)
+    allTickets.sort((a, b) => {
+      const [d1, m1, y1] = a.tanggal.split('/');
+      const [d2, m2, y2] = b.tanggal.split('/');
+
+      if (!y1 || !y2) return a.tanggal.localeCompare(b.tanggal);
+
+      const dateA = new Date(Number(y1), Number(m1) - 1, Number(d1));
+      const dateB = new Date(Number(y2), Number(m2) - 1, Number(d2));
+
+      return dateA.getTime() - dateB.getTime();
+    });
+
+    // Re-number all tickets sequentially
+    allTickets.forEach((t, idx) => {
+      t.no = idx + 1;
+    });
+
+    // Recalculate summary from deduplicated tickets
+    const totalTiket = allTickets.length;
+    let totalPending = 0;
+    let totalMetResp = 0;
+    let totalMetResol = 0;
+    let incidentCount = 0;
+    let srCount = 0;
+
+    if (hasStatusColumns) {
+      // Use status_respon/status_resol (matches converter.ts logic exactly)
+      for (const t of allTickets) {
+        // Count incident vs SR
+        const tipeCode = t.tipe.trim().toUpperCase();
+        if (tipeCode === "IN" || tipeCode.includes("INCIDENT")) {
+          incidentCount++;
+        } else if (tipeCode === "SR" || tipeCode.includes("SERVICE REQUEST")) {
+          srCount++;
+        }
+
+        // Use status columns (Met/Missed/Pending) - same as converter.ts
+        const respon = t._statusRespon;
+        const resol = t._statusResol;
+
+        // Pending: has respon but no resol, or explicitly "pending"
+        let isPending = false;
+        if (respon !== "" && resol === "") {
+          isPending = true;
+        } else if (resol === "pending" || respon === "pending") {
+          isPending = true;
+        }
+
+        if (isPending) {
+          totalPending++;
+        }
+
+        if (respon === "met" || respon === "1" || respon === "terpenuhi") {
+          totalMetResp++;
+        }
+        if (resol === "met" || resol === "1" || resol === "terpenuhi") {
+          totalMetResol++;
+        }
       }
-      ticketsByBatch.get(bid)!.push(ticket);
-    }
-
-    // Recalculate totals setelah deduplication
-    const totalUniqueTickets = uniqueTickets.length;
-
-    // Jika multiple batches, aggregate jadi satu report
-    // Jika single batch, pakai data asli
-    let conversionData: ConversionData;
-
-    if (batchResult.rows.length === 1) {
-      // Single batch - pakai data langsung
-      const batch = batchResult.rows[0];
-      const tickets = ticketsByBatch.get(batch.id as number) || [];
-
-      conversionData = {
-        periode: batch.periode as string,
-        tanggal: new Date().toLocaleDateString("id-ID"),
-        totalTiket: totalUniqueTickets, // Use deduplicated count
-        totalPending: batch.total_pending as number,
-        totalSelesai: batch.total_selesai as number,
-        totalMetResp: batch.total_met_resp as number,
-        totalMetResol: batch.total_met_resol as number,
-        pctMetResp: batch.pct_met_resp as string,
-        pctMetResol: batch.pct_met_resol as string,
-        incidentCount: batch.incident_count as number,
-        srCount: batch.sr_count as number,
-        top5: JSON.parse((batch.top_5 as string) || "[]"),
-        tickets: tickets.map((t, idx) => ({
-          no: idx + 1,
-          tiket: t.tiket as string,
-          ringkasan: t.ringkasan as string,
-          rincian: t.rincian as string,
-          pemohon: t.pemohon as string,
-          penyebab: t.penyebab as string,
-          solusi: t.solusi as string,
-          tipe: t.tipe as string,
-          tanggal: t.tanggal as string,
-          pic: t.pic as string,
-          vendor: t.vendor as string,
-          status: t.status as string,
-          slaRespon: t.sla_respon as string,
-          slaResol: t.sla_resol as string,
-        })),
-      };
     } else {
-      // Multiple batches - aggregate
-      let totalTiket = 0;
-      let totalPending = 0;
-      let totalSelesai = 0;
-      let totalMetResp = 0;
-      let totalMetResol = 0;
-      let incidentCount = 0;
-      let srCount = 0;
-      const allTickets: ConversionData["tickets"] = [];
-      const top5Map = new Map<string, number>();
-
+      // Fallback for old data: use stored batch-level stats (correct per-batch from converter)
       for (const batch of batchResult.rows) {
-        totalTiket += (batch.total_tiket as number) || 0;
-        totalPending += (batch.total_pending as number) || 0;
-        totalSelesai += (batch.total_selesai as number) || 0;
         totalMetResp += (batch.total_met_resp as number) || 0;
         totalMetResol += (batch.total_met_resol as number) || 0;
         incidentCount += (batch.incident_count as number) || 0;
         srCount += (batch.sr_count as number) || 0;
-
-        // Aggregate top5
-        const batchTop5 = JSON.parse((batch.top_5 as string) || "[]") as Array<
-          [string, number]
-        >;
-        for (const [category, count] of batchTop5) {
-          top5Map.set(category, (top5Map.get(category) || 0) + count);
-        }
-
-        // Aggregate tickets are mapped later with sequential numbers
-        const tickets = ticketsByBatch.get(batch.id as number) || [];
-        allTickets.push(
-          ...tickets.map((t) => ({
-            no: 0, // Will be re-assigned below
-            tiket: t.tiket as string,
-            ringkasan: t.ringkasan as string,
-            rincian: t.rincian as string,
-            pemohon: t.pemohon as string,
-            penyebab: t.penyebab as string,
-            solusi: t.solusi as string,
-            tipe: t.tipe as string,
-            tanggal: t.tanggal as string,
-            pic: t.pic as string,
-            vendor: t.vendor as string,
-            status: t.status as string,
-            slaRespon: t.sla_respon as string,
-            slaResol: t.sla_resol as string,
-          }))
-        );
+        totalPending += (batch.total_pending as number) || 0;
       }
-      
-      // Sort combined tickets by date ascending (parsing DD/MM/YYYY)
-      allTickets.sort((a, b) => {
-        const [d1, m1, y1] = a.tanggal.split('/');
-        const [d2, m2, y2] = b.tanggal.split('/');
-        
-        if (!y1 || !y2) return a.tanggal.localeCompare(b.tanggal);
-        
-        const dateA = new Date(Number(y1), Number(m1) - 1, Number(d1));
-        const dateB = new Date(Number(y2), Number(m2) - 1, Number(d2));
-        
-        return dateA.getTime() - dateB.getTime();
-      });
-
-      // Re-number all tickets sequentially
-      allTickets.forEach((t, idx) => {
-        t.no = idx + 1;
-      });
-
-      // Calculate percentages
-      const pctMetResp =
-        totalTiket > 0 ? `${((totalMetResp / totalTiket) * 100).toFixed(2)}%` : "0.00%";
-      const pctMetResol =
-        totalTiket > 0 ? `${((totalMetResol / totalTiket) * 100).toFixed(2)}%` : "0.00%";
-
-      // Sort and get top5
-      const sortedTop5 = Array.from(top5Map.entries())
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5);
-
-      // Generate periode label
-      let periodeLabel = "Multiple Periods";
-      if (year && month) {
-        const monthNames = [
-          "Januari",
-          "Februari",
-          "Maret",
-          "April",
-          "Mei",
-          "Juni",
-          "Juli",
-          "Agustus",
-          "September",
-          "Oktober",
-          "November",
-          "Desember",
-        ];
-        periodeLabel = `${monthNames[parseInt(month) - 1]} ${year}`;
-      } else if (year) {
-        periodeLabel = `Tahun ${year}`;
-      }
-
-      conversionData = {
-        periode: periodeLabel,
-        tanggal: new Date().toLocaleDateString("id-ID"),
-        totalTiket,
-        totalPending,
-        totalSelesai,
-        totalMetResp,
-        totalMetResol,
-        pctMetResp,
-        pctMetResol,
-        incidentCount,
-        srCount,
-        top5: sortedTop5,
-        tickets: allTickets,
-      };
     }
+
+    const totalSelesai = totalTiket - totalPending;
+    const denominator = totalSelesai > 0 ? totalSelesai : 1;
+    const pctMetResp = `${((totalMetResp / denominator) * 100).toFixed(2)}%`;
+    const pctMetResol = `${((totalMetResol / denominator) * 100).toFixed(2)}%`;
+
+    // Top 5 ringkasan by frequency (from deduplicated tickets)
+    const freqMap: Record<string, number> = {};
+    for (const t of allTickets) {
+      if (t.ringkasan) freqMap[t.ringkasan] = (freqMap[t.ringkasan] ?? 0) + 1;
+    }
+    const sortedTop5 = Object.entries(freqMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5) as Array<[string, number]>;
+
+    // Generate periode label
+    let periodeLabel: string;
+    if (batchResult.rows.length === 1) {
+      periodeLabel = batchResult.rows[0].periode as string;
+    } else if (year && month) {
+      const monthNames = [
+        "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+        "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+      ];
+      periodeLabel = `${monthNames[parseInt(month) - 1]} ${year}`;
+    } else if (year) {
+      periodeLabel = `Tahun ${year}`;
+    } else {
+      periodeLabel = "Multiple Periods";
+    }
+
+    const conversionData: ConversionData = {
+      periode: periodeLabel,
+      tanggal: new Date().toLocaleDateString("id-ID"),
+      totalTiket,
+      totalPending,
+      totalSelesai,
+      totalMetResp,
+      totalMetResol,
+      pctMetResp,
+      pctMetResol,
+      incidentCount,
+      srCount,
+      top5: sortedTop5,
+      tickets: allTickets,
+    };
 
     // Generate DOCX
     const docxBuffer = await generateDocxFromData(conversionData);
