@@ -75,6 +75,16 @@ Top 5 kategori masalah.
 | count | INTEGER | Frekuensi |
 | created_at | DATETIME | Timestamp |
 
+### 4. users
+Akun pengguna untuk login ke aplikasi.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | INTEGER PK | Auto-increment |
+| username | TEXT | Username unik untuk login |
+| password | TEXT | Password yang sudah di-hash (bcrypt) |
+| created_at | DATETIME | Timestamp |
+
 ## Functions
 
 ### saveConversionBatch(data, tickets, top5)
@@ -418,3 +428,67 @@ Gunakan nama bulan bahasa Indonesia berikut untuk query:
 
 > **Format periode di database**: `"NamaBulan Tahun"` → contoh: `"Agustus 2025"`, `"Januari 2026"`
 
+---
+
+## Manajemen Akun (CRUD Users)
+
+Query berikut digunakan untuk mengelola data akun pengguna di tabel `users`. Operasi ini dapat dilakukan melalui Turso Shell/Studio atau menggunakan perintah CLI Turso.
+
+### 1. Create (Menambah Akun Baru)
+
+Sebelum melakukan `INSERT`, Anda **wajib** melakukan hashing pada password. Anda dapat menggunakan script bantuan yang tersedia di proyek:
+```bash
+node scripts/hash-password.js username_anda password_anda
+```
+
+Setelah mendapatkan hasil hash dari script di atas, jalankan query `INSERT` berikut:
+
+```sql
+INSERT INTO users (username, password) 
+VALUES ('admin', '$2b$10$HASH_PASSWORD_YANG_DIDAPATKAN_DARI_SCRIPT');
+```
+
+### 2. Read (Melihat Daftar Akun)
+
+Melihat semua akun pengguna yang terdaftar:
+```sql
+SELECT id, username, created_at FROM users;
+```
+
+Mencari akun berdasarkan username tertentu:
+```sql
+SELECT id, username, created_at FROM users WHERE username = 'admin';
+```
+
+### 3. Update (Mengubah Password / Username)
+
+Sama seperti membuat akun, Anda harus melakukan generate hash password baru terlebih dahulu jika ingin mengganti password:
+```bash
+node scripts/hash-password.js admin password_baru_123
+```
+
+Kemudian gunakan hash baru pada query `UPDATE`:
+```sql
+UPDATE users 
+SET password = '$2b$10$HASH_PASSWORD_BARU_DISINI' 
+WHERE username = 'admin';
+```
+
+*Catatan: Anda juga bisa mengubah username jika diperlukan:*
+```sql
+UPDATE users SET username = 'superadmin' WHERE username = 'admin';
+```
+
+### 4. Delete (Menghapus Akun)
+
+Menghapus akun berdasarkan username:
+```sql
+DELETE FROM users WHERE username = 'admin';
+```
+
+Menghapus akun berdasarkan ID:
+```sql
+DELETE FROM users WHERE id = 1;
+```
+
+**⚠️ Peringatan:** Pastikan Anda selalu menyisakan setidaknya 1 akun aktif (jangan menghapus seluruh data user) agar Anda tetap memiliki akses login ke dalam dashboard aplikasi.
