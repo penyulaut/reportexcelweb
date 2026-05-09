@@ -1,10 +1,15 @@
 import { NextRequest } from "next/server";
+import { auth } from "@/auth";
 import { initDatabase, getAllAccounts, createAccount, getAccountById } from "@/lib/turso";
 
 export const runtime = "nodejs";
 
 export async function GET() {
   try {
+    const session = await auth();
+    if (!session?.user) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
     await initDatabase();
     const accounts = await getAllAccounts();
     return Response.json(accounts);
@@ -17,6 +22,11 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await auth();
+    if (!session?.user) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    await initDatabase();
     const body = await request.json();
     const id = await createAccount({ name: body.name, password: body.password });
     const account = await getAccountById(id);
