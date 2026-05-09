@@ -40,8 +40,13 @@ export const EcommerceMetrics = () => {
     let mounted = true;
     setLoading(true);
 
-    const doFetch = () => {
-      return fetch("/api/stats")
+    const doFetch = (rangeFilter?: { startDate?: string; endDate?: string }) => {
+      const params = new URLSearchParams();
+      if (rangeFilter?.startDate) params.set("startDate", rangeFilter.startDate);
+      if (rangeFilter?.endDate) params.set("endDate", rangeFilter.endDate);
+      const url = params.toString() ? `/api/stats?${params.toString()}` : "/api/stats";
+
+      return fetch(url)
         .then((r) => r.json())
         .then((data: ApiResponse) => {
           if (!mounted) return;
@@ -79,12 +84,34 @@ export const EcommerceMetrics = () => {
         });
     };
 
-    doFetch();
+    let initialRange: { startDate?: string; endDate?: string } | undefined;
+    try {
+      const stored = sessionStorage.getItem("statsRange");
+      if (stored) initialRange = JSON.parse(stored);
+    } catch (e) {
+      // ignore storage errors
+    }
+
+    doFetch(initialRange);
 
     // Listen for updates dispatched by charts
     const handler = (e: Event) => {
       try {
         const detail: any = (e as CustomEvent).detail;
+        if (detail?.startDate || detail?.endDate) {
+          try {
+            sessionStorage.setItem(
+              "statsRange",
+              JSON.stringify({ startDate: detail?.startDate, endDate: detail?.endDate })
+            );
+          } catch (e) {
+            // ignore storage errors
+          }
+          setLoading(true);
+          doFetch({ startDate: detail?.startDate, endDate: detail?.endDate });
+          return;
+        }
+
         const batches: Batch[] = detail?.payload?.batches ?? null;
         if (batches) {
           const sums = batches.reduce(
@@ -105,10 +132,6 @@ export const EcommerceMetrics = () => {
             }
           );
           setTotals(sums);
-        } else if (detail?.range || detail?.year) {
-          // fallback: refetch if event doesn't include payload
-          setLoading(true);
-          doFetch();
         }
       } catch (err) {
         // ignore

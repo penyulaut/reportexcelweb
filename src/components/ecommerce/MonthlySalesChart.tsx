@@ -25,13 +25,21 @@ export default function MonthlySalesChart() {
   const [categories, setCategories] = useState<string[]>([]);
   const [salesData, setSalesData] = useState<number[]>([]);
   const [range, setRange] = useState<"monthly" | "quarterly" | "annually">("monthly");
-  const [yearFilter, setYearFilter] = useState<string | undefined>(undefined);
+  const [dateRange, setDateRange] = useState<{ startDate?: string; endDate?: string }>({});
   const datePickerRef = useRef<HTMLInputElement | null>(null);
 
+  const toSqlDateTime = (value: Date) => value.toISOString().slice(0, 19).replace("T", " ");
+
   // Fetch stats from API and transform based on selected range
-  async function fetchStats(selectedRange: typeof range, year?: string) {
+  async function fetchStats(
+    selectedRange: typeof range,
+    rangeFilter?: { startDate?: string; endDate?: string }
+  ) {
     try {
-      const url = year ? `/api/stats?year=${encodeURIComponent(year)}` : "/api/stats";
+      const params = new URLSearchParams();
+      if (rangeFilter?.startDate) params.set("startDate", rangeFilter.startDate);
+      if (rangeFilter?.endDate) params.set("endDate", rangeFilter.endDate);
+      const url = params.toString() ? `/api/stats?${params.toString()}` : "/api/stats";
       const res = await fetch(url);
       if (!res.ok) throw new Error(res.statusText);
       const payload = await res.json();
@@ -50,7 +58,7 @@ export default function MonthlySalesChart() {
         rows.forEach((r) => {
           const m = Number(r.month_num || "0");
           const q = Math.ceil(m / 3) || 1;
-          const y = r.year || (year ?? "");
+          const y = r.year || "";
           const key = `${y}-Q${q}`;
           const prev = map.get(key) || 0;
           map.set(key, prev + Number(r.total_tickets || 0));
@@ -67,7 +75,7 @@ export default function MonthlySalesChart() {
         // annually: sum per year
         const map = new Map<string, number>();
         rows.forEach((r) => {
-          const y = r.year || (year ?? "");
+          const y = r.year || "";
           const prev = map.get(y) || 0;
           map.set(y, prev + Number(r.total_tickets || 0));
         });
@@ -80,7 +88,11 @@ export default function MonthlySalesChart() {
 
       // Notify other components (like metrics) so they can update without refetching if desired
       try {
-        window.dispatchEvent(new CustomEvent("statsRangeChanged", { detail: { range: selectedRange, year, payload } }));
+        window.dispatchEvent(
+          new CustomEvent("statsRangeChanged", {
+            detail: { range: selectedRange, startDate: rangeFilter?.startDate, endDate: rangeFilter?.endDate, payload },
+          })
+        );
       } catch (e) {
         // ignore if running server-side or event can't be dispatched
       }
@@ -90,29 +102,77 @@ export default function MonthlySalesChart() {
   }
 
   useEffect(() => {
-    // initial fetch
-    fetchStats(range, yearFilter);
+    const today = new Date();
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(today.getDate() - 6);
+
+    const endOfDay = new Date(today);
+    endOfDay.setHours(23, 59, 59, 999);
+    const initialRange = {
+      startDate: toSqlDateTime(sevenDaysAgo),
+      endDate: toSqlDateTime(endOfDay),
+    };
+
+    setDateRange(initialRange);
+    try {
+      sessionStorage.setItem("statsRange", JSON.stringify(initialRange));
+    } catch (e) {
+      // ignore storage errors
+    }
+    fetchStats(range, initialRange);
     return () => {};
   }, []);
 
-  // init flatpickr for year selection
+  // init flatpickr for date range selection
   useEffect(() => {
     if (!datePickerRef.current) return;
-    const fp = (flatpickr as any)(datePickerRef.current, {
-      dateFormat: "Y",
-      allowInput: false,
+
+    const fp = flatpickr(datePickerRef.current, {
+      mode: "range",
+      static: true,
+      monthSelectorType: "static",
+      dateFormat: "M d",
+      clickOpens: true,
+
+      // HAPUS defaultDate supaya tidak otomatis May 03 - May 09
+
+      prevArrow:
+        '<svg class="stroke-current" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12.5 15L7.5 10L12.5 5" stroke="" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+
+      nextArrow:
+        '<svg class="stroke-current" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7.5 15L12.5 10L7.5 5" stroke="" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+
       onChange: (selectedDates: Date[]) => {
-        const y = selectedDates?.[0]?.getFullYear?.()?.toString();
-        setYearFilter(y);
-        fetchStats(range, y);
+        if (selectedDates.length === 2) {
+          const start = selectedDates[0];
+
+          const end = new Date(selectedDates[1]);
+
+          end.setHours(23, 59, 59, 999);
+
+          const nextRange = {
+            startDate: toSqlDateTime(start),
+            endDate: toSqlDateTime(end),
+          };
+
+          setDateRange(nextRange);
+          try {
+            sessionStorage.setItem("statsRange", JSON.stringify(nextRange));
+          } catch (e) {
+            // ignore storage errors
+          }
+
+          fetchStats(range, nextRange);
+        }
       },
     });
+
     return () => {
       try {
-        fp?.destroy();
+        fp.destroy();
       } catch (e) {}
     };
-  }, [datePickerRef.current, range]);
+  }, [range]);
 
   const options: ApexOptions = {
     colors: ["#465fff"],
@@ -207,12 +267,13 @@ export default function MonthlySalesChart() {
           </p>
         </div>
         <div className="flex items-center gap-3 sm:justify-end">
-          <ChartTab selected={range} onChange={(r) => { setRange(r); fetchStats(r, yearFilter); }} />
+          <ChartTab selected={range} onChange={(r) => { setRange(r); fetchStats(r, dateRange); }} />
           <div className="relative inline-flex items-center">
-            <CalenderIcon className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 lg:left-3 lg:top-1/2 lg:translate-x-0 lg:-translate-y-1/2  text-gray-500 dark:text-gray-400 pointer-events-none z-10" />
+            <CalenderIcon className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 pointer-events-none text-gray-500 dark:text-gray-400 lg:left-3 lg:translate-x-0" />
+
             <input
               ref={datePickerRef}
-              className="h-10 w-10 lg:w-40 lg:h-auto  lg:pl-10 lg:pr-3 lg:py-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-transparent lg:text-gray-700 outline-none dark:border-gray-700 dark:bg-gray-800 dark:lg:text-gray-300 cursor-pointer"
+              className="h-10 w-10 cursor-pointer rounded-lg border border-gray-200 bg-white text-sm font-medium text-transparent outline-none dark:border-gray-700 dark:bg-gray-800 lg:h-auto lg:w-40 lg:py-2 lg:pl-10 lg:pr-3 lg:text-gray-700 dark:lg:text-gray-300"
               placeholder="Select date range"
             />
           </div>
