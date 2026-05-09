@@ -1,40 +1,88 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { ApexOptions } from "apexcharts";
-import flatpickr from "flatpickr";
-import ChartTab from "../common/ChartTab";
-import { CalenderIcon } from "../../icons";
 
 const Chart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
 export default function StatisticsChart() {
-  const datePickerRef = useRef<HTMLInputElement>(null);
+  const [pendingData, setPendingData] = useState<number[]>(() => Array(12).fill(0));
+  const [completedData, setCompletedData] = useState<number[]>(() => Array(12).fill(0));
+
+  const monthLabels = useMemo(
+    () => [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ],
+    []
+  );
+
+  const updateSeriesFromRows = (rows: any[]) => {
+    const pending = Array(12).fill(0);
+    const completed = Array(12).fill(0);
+
+    for (const r of rows) {
+      const monthIndex = Number(r.month_num || "0") - 1;
+      if (monthIndex < 0 || monthIndex > 11) continue;
+      pending[monthIndex] += Number(r.total_pending || 0);
+      completed[monthIndex] += Number(r.total_selesai || 0);
+    }
+
+    setPendingData(pending);
+    setCompletedData(completed);
+  };
+
+  const fetchStats = async (rangeFilter?: { startDate?: string; endDate?: string }) => {
+    try {
+      const params = new URLSearchParams();
+      if (rangeFilter?.startDate) params.set("startDate", rangeFilter.startDate);
+      if (rangeFilter?.endDate) params.set("endDate", rangeFilter.endDate);
+      const url = params.toString() ? `/api/stats?${params.toString()}` : "/api/stats";
+
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(res.statusText);
+      const payload = await res.json();
+      const rows: any[] = payload?.monthlyStats || [];
+
+      updateSeriesFromRows(rows);
+    } catch (err) {
+      console.error("/api/stats error", err);
+    }
+  };
 
   useEffect(() => {
-    if (!datePickerRef.current) return;
+    const handler = (e: Event) => {
+      try {
+        const detail: any = (e as CustomEvent).detail;
+        const rows: any[] = detail?.payload?.monthlyStats || [];
 
-    const today = new Date();
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(today.getDate() - 6);
+        if (rows.length > 0) {
+          updateSeriesFromRows(rows);
+          return;
+        }
 
-    const fp = flatpickr(datePickerRef.current, {
-      mode: "range",
-      static: true,
-      monthSelectorType: "static",
-      dateFormat: "M d",
-      defaultDate: [sevenDaysAgo, today],
-      clickOpens: true,
-      prevArrow:
-        '<svg class="stroke-current" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12.5 15L7.5 10L12.5 5" stroke="" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-      nextArrow:
-        '<svg class="stroke-current" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7.5 15L12.5 10L7.5 5" stroke="" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    });
+        if (detail?.startDate || detail?.endDate) {
+          fetchStats({ startDate: detail?.startDate, endDate: detail?.endDate });
+        }
+      } catch (err) {
+        // ignore
+      }
+    };
+
+    window.addEventListener("statsRangeChanged", handler as EventListener);
 
     return () => {
-      if (!Array.isArray(fp)) {
-        fp.destroy();
-      }
+      window.removeEventListener("statsRangeChanged", handler as EventListener);
     };
   }, []);
 
@@ -96,20 +144,7 @@ export default function StatisticsChart() {
     },
     xaxis: {
       type: "category", // Category-based x-axis
-      categories: [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
-      ],
+      categories: monthLabels,
       axisBorder: {
         show: false, // Hide x-axis border
       },
@@ -138,12 +173,12 @@ export default function StatisticsChart() {
 
   const series = [
     {
-      name: "Sales",
-      data: [180, 190, 170, 160, 175, 165, 170, 205, 230, 210, 240, 235],
+      name: "Tiket Selesai",
+      data: completedData,
     },
     {
-      name: "Revenue",
-      data: [40, 30, 50, 40, 55, 40, 70, 100, 110, 120, 150, 140],
+      name: "Tiket Pending",
+      data: pendingData,
     },
   ];
   return (
@@ -154,20 +189,10 @@ export default function StatisticsChart() {
             Statistics
           </h3>
           <p className="mt-1 text-gray-500 text-theme-sm dark:text-gray-400">
-            Target you've set for each month
+            Perbandingan tiket selesai dan pending per bulan
           </p>
         </div>
-        {/* <div className="flex items-center gap-3 sm:justify-end">
-          <ChartTab />
-          <div className="relative inline-flex items-center">
-            <CalenderIcon className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 lg:left-3 lg:top-1/2 lg:translate-x-0 lg:-translate-y-1/2  text-gray-500 dark:text-gray-400 pointer-events-none z-10" />
-            <input
-              ref={datePickerRef}
-              className="h-10 w-10 lg:w-40 lg:h-auto  lg:pl-10 lg:pr-3 lg:py-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-transparent lg:text-gray-700 outline-none dark:border-gray-700 dark:bg-gray-800 dark:lg:text-gray-300 cursor-pointer"
-              placeholder="Select date range"
-            />
-          </div>
-        </div> */}
+        <div className="flex items-center gap-3 sm:justify-end" />
       </div>
 
       <div className="max-w-full overflow-x-auto custom-scrollbar">

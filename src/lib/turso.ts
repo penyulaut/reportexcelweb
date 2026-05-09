@@ -61,6 +61,46 @@ export async function initDatabase() {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    
+    // Table for admin accounts (UI-managed)
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS accounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        password TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Migration: if older schema used `email` or `role`, migrate to new schema with `password`
+    try {
+      const info = await db.execute({ sql: `PRAGMA table_info(accounts)` });
+      const cols = info.rows.map((r: any) => r.name);
+      const hasEmail = cols.includes("email");
+      const hasRole = cols.includes("role");
+      const hasPassword = cols.includes("password");
+
+      if ((hasEmail || hasRole) && !hasPassword) {
+        console.log("[Turso] Migrating accounts table: email/role -> password");
+        await db.execute({ sql: `CREATE TABLE IF NOT EXISTS accounts_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT,
+          password TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )` });
+
+        // Copy existing data: map email -> password
+        await db.execute({ sql: `INSERT INTO accounts_new (id, name, password, created_at)
+          SELECT id, name, COALESCE(email, '') as password, created_at FROM accounts` });
+
+        await db.execute({ sql: `DROP TABLE accounts` });
+        await db.execute({ sql: `ALTER TABLE accounts_new RENAME TO accounts` });
+        console.log("[Turso] Migration complete: accounts schema updated.");
+      }
+    } catch (e) {
+      // Non-fatal: if PRAGMA fails, continue
+      console.warn("[Turso] accounts migration check failed:", e);
+    }
   
   // Table for individual tickets
   await db.execute(`
@@ -133,6 +173,48 @@ export async function initDatabase() {
     }
     throw err;
   }
+}
+
+// ============ Accounts CRUD ============
+export interface Account {
+  id?: number | string;
+  name?: string;
+  password?: string;
+}
+
+export async function getAllAccounts() {
+  const db = getTursoClient();
+  const result = await db.execute({
+    sql: `SELECT id, name, password, created_at FROM accounts ORDER BY created_at DESC`,
+  });
+  return result.rows;
+}
+
+export async function getAccountById(id: number | string) {
+  const db = getTursoClient();
+  const result = await db.execute({ sql: `SELECT id, name, password, created_at FROM accounts WHERE id = ?`, args: [id] });
+  return result.rows[0];
+}
+
+export async function createAccount(payload: { name?: string; password?: string }) {
+  const db = getTursoClient();
+  const res = await db.execute({
+    sql: `INSERT INTO accounts (name, password) VALUES (?, ?)`,
+    args: [payload.name ?? null, payload.password ?? null],
+  });
+  return Number(res.lastInsertRowid);
+}
+
+export async function updateAccount(id: number | string, payload: { name?: string; password?: string }) {
+  const db = getTursoClient();
+  await db.execute({ sql: `UPDATE accounts SET name = ?, password = ? WHERE id = ?`, args: [payload.name ?? null, payload.password ?? null, id] });
+  return getAccountById(id);
+}
+
+export async function deleteAccount(id: number | string) {
+  const db = getTursoClient();
+  await db.execute({ sql: `DELETE FROM accounts WHERE id = ?`, args: [id] });
+  return true;
 }
 
 export interface ConversionBatch {
@@ -263,6 +345,15 @@ export async function getUserByUsername(username: string) {
   const db = getTursoClient();
   const result = await db.execute({
     sql: "SELECT id, username, password FROM users WHERE username = ?",
+    args: [username],
+  });
+  return result.rows[0];
+}
+
+export async function getAccountByUsername(username: string) {
+  const db = getTursoClient();
+  const result = await db.execute({
+    sql: "SELECT id, name, password FROM accounts WHERE name = ?",
     args: [username],
   });
   return result.rows[0];

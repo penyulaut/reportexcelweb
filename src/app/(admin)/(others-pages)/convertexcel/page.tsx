@@ -73,185 +73,329 @@ export default function Home() {
   };
 
   return (
-    <div className="page-root">
-      {/* BG blobs */}
-      <div className="blob blob-1" />
-      <div className="blob blob-2" />
-      <div className="blob blob-3" />
+    <div className="min-h-screen relative overflow-hidden">
+  {/* Background Blur */}
+  {/* <div className="absolute top-0 left-0 h-72 w-72 rounded-full bg-brand-500/10 blur-3xl" /> */}
+  {/* <div className="absolute bottom-0 right-0 h-72 w-72 rounded-full bg-blue-500/10 blur-3xl" /> */}
 
-      <main className="card">
-        {/* Logo / title area */}
-        <div className="header-area">
-          <div className="icon-wrap">
-            <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <rect width="48" height="48" rx="12" fill="url(#grad)" />
-              <defs>
-                <linearGradient id="grad" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
-                  <stop stopColor="#6366f1" />
-                  <stop offset="1" stopColor="#8b5cf6" />
-                </linearGradient>
-              </defs>
-              <path d="M14 12h13l7 7v17H14V12z" fill="white" fillOpacity=".15" stroke="white" strokeWidth="1.5" strokeLinejoin="round" />
-              <path d="M27 12v7h7" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              <rect x="18" y="24" width="12" height="2" rx="1" fill="white" fillOpacity=".8" />
-              <rect x="18" y="29" width="8" height="2" rx="1" fill="white" fillOpacity=".6" />
-              <circle cx="34" cy="34" r="7" fill="#22d3ee" />
-              <path d="M31 34l2 2 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  <main className="relative z-10 mx-auto max-w-3xl p-6">
+    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-theme-xl dark:border-white/10 dark:bg-white/5">
+      
+      {/* Header */}
+      <div className="border-b border-gray-100 px-8 py-8 dark:border-white/10">
+        <div className="flex flex-col items-center text-center">
+          
+          {/* Logo */}
+          <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-2xl bg-brand-500/10 text-brand-500 dark:bg-brand-500/20">
+            <svg
+              viewBox="0 0 48 48"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-10 w-10"
+            >
+              <rect
+                width="48"
+                height="48"
+                rx="12"
+                fill="currentColor"
+                fillOpacity="0.15"
+              />
+              <path
+                d="M14 12h13l7 7v17H14V12z"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M27 12v7h7"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <rect
+                x="18"
+                y="24"
+                width="12"
+                height="2"
+                rx="1"
+                fill="currentColor"
+              />
+              <rect
+                x="18"
+                y="29"
+                width="8"
+                height="2"
+                rx="1"
+                fill="currentColor"
+                opacity="0.7"
+              />
             </svg>
           </div>
-          <h1 className="title">Log DTE Converter</h1>
-          <p className="subtitle">
-            Upload spreadsheet SLA&nbsp;(.xlsx) → generate dokumen Log Dukungan Teknis (.docx) otomatis
+
+          {/* Title */}
+          <h1 className="text-2xl font-bold text-gray-800 dark:text-white/90">
+            Dashboard Converter
+          </h1>
+
+          <p className="mt-2 max-w-xl text-sm leading-6 text-gray-500 dark:text-gray-400">
+            Upload file Excel (.xlsx) untuk menghasilkan dokumen laporan secara otomatis dengan tampilan modern dan cepat.
           </p>
         </div>
 
-        {/* Steps indicator */}
-        <div className="steps">
-          <div className={`step ${file || state.status !== "idle" ? "done" : "active"}`}>
-            <span className="step-num">1</span>
-            <span className="step-label">Upload XLSX</span>
+        {/* Steps */}
+        <div className="mt-8 flex items-center justify-center gap-3">
+          <div
+            className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium ${
+              file || state.status !== "idle"
+                ? "bg-brand-500 text-white"
+                : "bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300"
+            }`}
+          >
+            <span>1</span>
+            <span>Upload</span>
           </div>
-          <div className="step-line" />
-          <div className={`step ${state.status === "success" ? "done" : state.status === "uploading" ? "active" : ""}`}>
-            <span className="step-num">2</span>
-            <span className="step-label">Konversi</span>
+
+          <div className="h-px w-10 bg-gray-300 dark:bg-white/10" />
+
+          <div
+            className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium ${
+              state.status === "uploading" || state.status === "success"
+                ? "bg-brand-500 text-white"
+                : "bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300"
+            }`}
+          >
+            <span>2</span>
+            <span>Proses</span>
           </div>
-          <div className="step-line" />
-          <div className={`step ${state.status === "success" ? "active" : ""}`}>
-            <span className="step-num">3</span>
-            <span className="step-label">Download</span>
+
+          <div className="h-px w-10 bg-gray-300 dark:bg-white/10" />
+
+          <div
+            className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium ${
+              state.status === "success"
+                ? "bg-brand-500 text-white"
+                : "bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300"
+            }`}
+          >
+            <span>3</span>
+            <span>Download</span>
           </div>
         </div>
+      </div>
 
-        {/* Drop zone */}
+      {/* Content */}
+      <div className="p-8">
+        
+        {/* Upload Area */}
         <div
           id="dropzone"
-          className={`dropzone ${dragOver ? "drag-over" : ""} ${file ? "has-file" : ""} ${state.status === "uploading" ? "loading" : ""}`}
+          className={`group cursor-pointer rounded-2xl border-2 border-dashed p-10 text-center transition-all duration-300 ${
+            dragOver
+              ? "border-brand-500 bg-brand-500/5"
+              : "border-gray-300 hover:border-brand-400 hover:bg-gray-50 dark:border-white/10 dark:hover:bg-white/5"
+          } ${
+            state.status === "uploading"
+              ? "pointer-events-none opacity-80"
+              : ""
+          }`}
           onClick={() => inputRef.current?.click()}
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
           role="button"
           tabIndex={0}
           aria-label="Upload area"
-          onKeyDown={(e) => e.key === "Enter" && inputRef.current?.click()}
+          onKeyDown={(e) =>
+            e.key === "Enter" && inputRef.current?.click()
+          }
         >
           <input
             ref={inputRef}
             id="file-input"
             type="file"
             accept=".xlsx"
-            style={{ display: "none" }}
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleFile(f);
+            }}
           />
 
           {state.status === "uploading" ? (
-            <div className="dz-content">
-              <div className="spinner" aria-label="Converting..." />
-              <p className="dz-primary">Sedang mengonversi…</p>
-              <p className="dz-secondary">Harap tunggu sebentar</p>
+            <div className="flex flex-col items-center">
+              <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" />
+
+              <p className="text-lg font-semibold text-gray-800 dark:text-white/90">
+                Sedang Memproses...
+              </p>
+
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Mohon tunggu beberapa saat
+              </p>
             </div>
           ) : file ? (
-            <div className="dz-content">
-              <div className="file-icon">
-                <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                  <path d="M6 4h19l9 9v23H6V4z" fill="#22c55e" fillOpacity=".15" stroke="#22c55e" strokeWidth="1.5" />
-                  <path d="M25 4v9h9" stroke="#22c55e" strokeWidth="1.5" strokeLinecap="round" />
-                  <path d="M13 20h14M13 25h10" stroke="#22c55e" strokeWidth="1.5" strokeLinecap="round" />
+            <div className="flex flex-col items-center">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-green-500/10 text-green-500">
+                <svg
+                  viewBox="0 0 40 40"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-8 w-8"
+                >
+                  <path
+                    d="M6 4h19l9 9v23H6V4z"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                  />
+                  <path
+                    d="M25 4v9h9"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                  />
                 </svg>
               </div>
-              <p className="dz-primary">{file.name}</p>
-              <p className="dz-secondary">{(file.size / 1024).toFixed(1)} KB · Klik untuk ganti file</p>
+
+              <p className="text-base font-semibold text-gray-800 dark:text-white/90">
+                {file.name}
+              </p>
+
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                {(file.size / 1024).toFixed(1)} KB • Klik untuk mengganti file
+              </p>
             </div>
           ) : (
-            <div className="dz-content">
-              <div className="upload-icon">
-                <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                  <circle cx="20" cy="20" r="19" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 2" />
-                  <path d="M20 28V14M13 21l7-7 7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <div className="flex flex-col items-center">
+              <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-brand-500/10 text-brand-500">
+                <svg
+                  viewBox="0 0 40 40"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-8 w-8"
+                >
+                  <circle
+                    cx="20"
+                    cy="20"
+                    r="19"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeDasharray="4 2"
+                  />
+                  <path
+                    d="M20 28V14M13 21l7-7 7 7"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 </svg>
               </div>
-              <p className="dz-primary">Drag &amp; drop file XLSX di sini</p>
-              <p className="dz-secondary">atau <span className="dz-link">klik untuk browse</span></p>
+
+              <p className="text-lg font-semibold text-gray-800 dark:text-white/90">
+                Upload File Excel
+              </p>
+
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                Drag & drop file .xlsx atau klik untuk memilih file
+              </p>
             </div>
           )}
         </div>
 
-        {/* Error message */}
+        {/* Error */}
         {state.status === "error" && (
-          <div className="alert alert-error" role="alert">
-            <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm-1-5h2v2H9v-2zm0-8h2v6H9V5z" clipRule="evenodd" />
-            </svg>
-            <span>{state.message}</span>
+          <div className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-500/20 dark:bg-red-500/10">
+            {state.message}
           </div>
         )}
 
-        {/* Success result */}
+        {/* Success */}
         {state.status === "success" && (
-          <div className="success-panel">
-            <div className="success-icon">
-              <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                <circle cx="20" cy="20" r="20" fill="#22c55e" fillOpacity=".15" />
-                <path d="M12 20l6 6 10-12" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          <div className="mt-6 flex items-center gap-4 rounded-2xl border border-green-200 bg-green-50 p-5 dark:border-green-500/20 dark:bg-green-500/10">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-green-500/10 text-green-500">
+              <svg
+                viewBox="0 0 40 40"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-7 w-7"
+              >
+                <path
+                  d="M12 20l6 6 10-12"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
             </div>
-            <div className="success-info">
-              <p className="success-title">Konversi berhasil!</p>
-              <p className="success-details">
-                <span className="badge">Periode: {state.periode}</span>
-                <span className="badge">{state.tickets} tiket</span>
+
+            <div>
+              <p className="text-base font-semibold text-gray-800 dark:text-white/90">
+                Dokumen berhasil dibuat
               </p>
+
+              <div className="mt-2 flex flex-wrap gap-2">
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-gray-600 shadow-sm dark:bg-white/10 dark:text-gray-300">
+                  Periode: {state.periode}
+                </span>
+
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-gray-600 shadow-sm dark:bg-white/10 dark:text-gray-300">
+                  {state.tickets} tiket
+                </span>
+              </div>
             </div>
           </div>
         )}
 
-        {/* Action buttons */}
-        <div className="actions">
+        {/* Actions */}
+        <div className="mt-8 flex flex-wrap items-center gap-3">
           {state.status === "success" ? (
             <>
-              <button id="btn-download" className="btn btn-primary" onClick={downloadFile}>
-                <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                  <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-5.707a1 1 0 011.414 0L9 12.586V5a1 1 0 012 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
+              <button
+                id="btn-download"
+                className="inline-flex items-center gap-2 rounded-xl bg-brand-500 px-5 py-3 text-sm font-medium text-white transition hover:bg-brand-600"
+                onClick={downloadFile}
+              >
                 Download {state.filename}
               </button>
-              <button id="btn-reset" className="btn btn-ghost" onClick={reset}>
-                Konversi Lagi
+
+              <button
+                id="btn-reset"
+                className="rounded-xl border border-gray-300 px-5 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-white/10 dark:text-white/90 dark:hover:bg-white/10"
+                onClick={reset}
+              >
+                Upload Lagi
               </button>
             </>
           ) : (
             <button
               id="btn-convert"
-              className="btn btn-primary"
+              className="inline-flex items-center gap-2 rounded-xl bg-brand-500 px-5 py-3 text-sm font-medium text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
               onClick={handleConvert}
               disabled={!file || state.status === "uploading"}
             >
               {state.status === "uploading" ? (
                 <>
-                  <div className="btn-spinner" />
-                  Mengonversi…
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  Memproses...
                 </>
               ) : (
-                <>
-                  <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                    <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-                  </svg>
-                  Generate Dokumen
-                </>
+                <>Generate Dokumen</>
               )}
             </button>
           )}
         </div>
 
-        {/* Info note */}
-        <div className="info-note">
-          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-            <path fillRule="evenodd" d="M8 16A8 8 0 108 0a8 8 0 000 16zm.75-11.25a.75.75 0 10-1.5 0v4.5a.75.75 0 001.5 0v-4.5zm-.75 8a.75.75 0 100-1.5.75.75 0 000 1.5z" clipRule="evenodd" />
-          </svg>
-          Tab <strong>All</strong> dari XLSX digunakan · Header Periode &amp; Tanggal otomatis diisi · Top&nbsp;5 ringkasan berdasarkan frekuensi · Diurutkan berdasarkan PIC
+        {/* Info */}
+        <div className="mt-8 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-400">
+          File Excel akan diproses secara otomatis dan menghasilkan dokumen laporan sesuai format sistem.
         </div>
-      </main>
+      </div>
     </div>
+  </main>
+</div>
   );
 }

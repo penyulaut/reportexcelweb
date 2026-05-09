@@ -159,7 +159,7 @@ export default function LogExportPage() {
 
       <div className="max-w-7xl mx-auto">
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <h2 className="text-xl font-semibold mb-6">Log Export - Preview & Export</h2>
+          <h2 className="text-xl font-semibold text-gray-800 dark:text-white/90">Log Export - Preview & Export</h2>
 
           {error && (
             <div className="mb-4 p-4 bg-red-50 text-red-600 rounded-lg">
@@ -216,7 +216,7 @@ export default function LogExportPage() {
           {/* Preview Section */}
           <div className="mb-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-medium">
+              <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">
                 Preview Data
                 {previewData && (
                   <span className="text-sm font-normal text-gray-500 ml-2">

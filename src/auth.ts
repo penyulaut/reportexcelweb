@@ -3,7 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 import type { JWT } from "next-auth/jwt";
 import type { Session } from "next-auth";
 import bcrypt from "bcryptjs";
-import { getUserByUsername } from "@/lib/turso";
+import { getAccountByUsername } from "@/lib/turso";
 
 // Extend the session type
 declare module "next-auth" {
@@ -43,24 +43,31 @@ export const {
         }
 
         try {
-          // Find user by username in DB
-          const user = await getUserByUsername(credentials.username as string);
+          // Find account by username in DB
+          const user = await getAccountByUsername(credentials.username as string);
           
           if (!user) {
             return null; // User not found
           }
 
           // Check password
-          const passwordsMatch = await bcrypt.compare(
-            credentials.password as string,
-            user.password as string
-          );
+          let passwordsMatch = false;
+          try {
+            passwordsMatch = await bcrypt.compare(
+              credentials.password as string,
+              user.password as string
+            );
+          } catch {
+            passwordsMatch = false;
+          }
 
-          if (passwordsMatch) {
+          const plainMatch = credentials.password === (user.password as string);
+
+          if (passwordsMatch || plainMatch) {
             return {
               id: user.id?.toString() as string,
-              name: user.username as string,
-              username: user.username as string,
+              name: user.name as string,
+              username: user.name as string,
             };
           }
         } catch (error) {
@@ -81,7 +88,7 @@ export const {
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.id;
+        // session.user.id = token.id;
         session.user.username = token.username;
         session.user.name = token.username;
       }
