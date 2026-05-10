@@ -22,6 +22,7 @@ type Batch = {
 
 type ApiResponse = {
   batches: Batch[];
+  monthlyStats?: any[];
 };
 
 export const EcommerceMetrics = () => {
@@ -51,17 +52,17 @@ export const EcommerceMetrics = () => {
         .then((data: ApiResponse) => {
           if (!mounted) return;
 
-          const batches: Batch[] = Array.isArray(data?.batches)
-            ? data.batches
+          const monthlyStats: any[] = Array.isArray(data?.monthlyStats)
+            ? data.monthlyStats
             : [];
 
-          const sums = batches.reduce(
-            (acc: Totals, b: Batch) => {
-              acc.totalTiket += Number(b.total_tiket ?? 0);
-              acc.totalPending += Number(b.total_pending ?? 0);
-              acc.totalSelesai += Number(b.total_selesai ?? 0);
-              acc.totalMetResp += Number(b.total_met_resp ?? 0);
-              acc.totalMetResol += Number(b.total_met_resol ?? 0);
+          const sums = monthlyStats.reduce(
+            (acc: Totals, m: any) => {
+              acc.totalTiket += Number(m.total_tickets ?? 0);
+              acc.totalPending += Number(m.total_pending ?? 0);
+              acc.totalSelesai += Number(m.total_selesai ?? 0);
+              acc.totalMetResp += Number(m.met_resp ?? 0);
+              acc.totalMetResol += Number(m.met_resol ?? 0);
               return acc;
             },
             {
@@ -112,15 +113,15 @@ export const EcommerceMetrics = () => {
           return;
         }
 
-        const batches: Batch[] = detail?.payload?.batches ?? null;
-        if (batches) {
-          const sums = batches.reduce(
-            (acc: Totals, b: Batch) => {
-              acc.totalTiket += Number(b.total_tiket ?? 0);
-              acc.totalPending += Number(b.total_pending ?? 0);
-              acc.totalSelesai += Number(b.total_selesai ?? 0);
-              acc.totalMetResp += Number(b.total_met_resp ?? 0);
-              acc.totalMetResol += Number(b.total_met_resol ?? 0);
+        const monthlyStats: any[] = detail?.payload?.monthlyStats ?? null;
+        if (monthlyStats) {
+          const sums = monthlyStats.reduce(
+            (acc: Totals, m: any) => {
+              acc.totalTiket += Number(m.total_tickets ?? 0);
+              acc.totalPending += Number(m.total_pending ?? 0);
+              acc.totalSelesai += Number(m.total_selesai ?? 0);
+              acc.totalMetResp += Number(m.met_resp ?? 0);
+              acc.totalMetResol += Number(m.met_resol ?? 0);
               return acc;
             },
             {

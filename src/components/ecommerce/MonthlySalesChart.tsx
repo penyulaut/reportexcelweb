@@ -102,20 +102,12 @@ export default function MonthlySalesChart() {
   }
 
   useEffect(() => {
-    const today = new Date();
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(today.getDate() - 6);
-
-    const endOfDay = new Date(today);
-    endOfDay.setHours(23, 59, 59, 999);
-    const initialRange = {
-      startDate: toSqlDateTime(sevenDaysAgo),
-      endDate: toSqlDateTime(endOfDay),
-    };
+    // Default to All Time (no initial date range filter)
+    const initialRange = {};
 
     setDateRange(initialRange);
     try {
-      sessionStorage.setItem("statsRange", JSON.stringify(initialRange));
+      sessionStorage.removeItem("statsRange");
     } catch (e) {
       // ignore storage errors
     }
