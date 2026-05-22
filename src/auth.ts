@@ -4,6 +4,7 @@ import type { JWT } from "next-auth/jwt";
 import type { Session } from "next-auth";
 import bcrypt from "bcryptjs";
 import { getAccountByUsername } from "@/lib/turso";
+import { authConfig } from "./auth.config";
 
 // Extend the session type
 declare module "next-auth" {
@@ -30,6 +31,7 @@ export const {
   signIn,
   signOut,
 } = NextAuth({
+  ...authConfig,
   providers: [
     Credentials({
       name: "Credentials",
@@ -78,30 +80,5 @@ export const {
       },
     }),
   ],
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-        token.username = (user as any).username;
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (session.user) {
-        // session.user.id = token.id;
-        session.user.username = token.username;
-        session.user.name = token.username;
-      }
-      return session;
-    },
-  },
-  pages: {
-    signIn: "/signin",
-    error: "/error",
-  },
-  session: {
-    strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 days
-  },
-  debug: process.env.NODE_ENV === "development",
 });
+
