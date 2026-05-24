@@ -1,15 +1,43 @@
 "use client";
-
 import Link from "next/link";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Dropdown } from "../ui/dropdown/Dropdown";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
 import { useSession, signIn, signOut } from "next-auth/react";
+
+function getInitials(name?: string | null) {
+  if (!name) return "T";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "T";
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase();
+}
 
 export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const { data: session, status } = useSession();
   const user = session?.user;
+  const [account, setAccount] = useState<{ id: string | number; name?: string } | null>(null);
+
+  useEffect(() => {
+    async function fetchAccount() {
+      if (!user?.id) {
+        setAccount(null);
+        return;
+      }
+      try {
+        const res = await fetch("/api/accounts", { credentials: "include" });
+        if (!res.ok) throw new Error("Gagal mengambil data");
+        const data = (await res.json()) as Array<{ id: string | number; name?: string }>;
+        const match = data.find((acc) => String(acc.id) === String(user.id)) ?? null;
+        setAccount(match);
+      } catch {
+        setAccount(null);
+      }
+    }
+
+    fetchAccount();
+  }, [user?.id]);
 
 function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
   e.stopPropagation();
@@ -26,11 +54,11 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
         className="flex items-center text-gray-700 dark:text-gray-400 dropdown-toggle"
       >
         <span className="mr-3 flex items-center justify-center overflow-hidden rounded-full h-11 w-11 bg-brand-500 text-white font-semibold text-lg dark:bg-brand-400">
-          {status === "loading" ? "" : (user?.name ?? user?.username ?? "Tamu").charAt(0).toUpperCase()}
+          {status === "loading" ? "" : (account?.name ?? user?.name ?? user?.username ?? "Tamu").charAt(0).toUpperCase()}
         </span>
 
         <span className="block mr-1 font-medium text-theme-sm">
-          {status === "loading" ? "Memuat..." : user?.name ?? user?.username ?? "Tamu"}
+          {status === "loading" ? "Memuat..." : account?.name ?? user?.name ?? user?.username ?? "Tamu"}
         </span>
 
         <svg
@@ -60,7 +88,7 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
       >
         <div>
           <span className="block font-medium text-gray-700 text-theme-sm dark:text-gray-400">
-            Hai {status === "loading" ? "Memuat..." : user?.name ?? user?.username ?? "Tamu"}
+            Hai {status === "loading" ? "Memuat..." : account?.name ?? user?.name ?? user?.username ?? "Tamu"}
           </span>         
         </div>
 

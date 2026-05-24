@@ -12,6 +12,7 @@ export const authConfig = {
     },
     async session({ session, token }) {
       if (session.user) {
+        session.user.id = token.id;
         session.user.username = token.username;
         session.user.name = token.username;
       }
